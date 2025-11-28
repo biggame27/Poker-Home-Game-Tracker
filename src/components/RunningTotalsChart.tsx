@@ -1,6 +1,6 @@
 'use client'
 
-import { LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Area } from 'recharts'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { useMemo } from 'react'
 import { format } from 'date-fns'
@@ -20,6 +20,14 @@ const chartConfig = {
   total: {
     label: 'Total',
     color: 'var(--chart-1)',
+  },
+  trend: {
+    label: 'Trend',
+    color: 'var(--chart-2)',
+  },
+  variance: {
+    label: 'Variance band',
+    color: 'var(--chart-2)',
   },
 } satisfies ChartConfig
 
@@ -78,6 +86,39 @@ export function RunningTotalsChart({
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
   }, [games, cumulative, userId])
 
+  const enhancedChartData = useMemo(() => {
+    if (chartData.length < 2) return chartData
+
+    const xs = chartData.map((_, idx) => idx)
+    const ys = chartData.map((point) => point.total)
+
+    const meanX = xs.reduce((sum, x) => sum + x, 0) / xs.length
+    const meanY = ys.reduce((sum, y) => sum + y, 0) / ys.length
+    const denominator = xs.reduce((sum, x) => sum + Math.pow(x - meanX, 2), 0)
+
+    if (denominator === 0) return chartData
+
+    const slope = xs.reduce((sum, x, idx) => sum + (x - meanX) * (ys[idx] - meanY), 0) / denominator
+    const intercept = meanY - slope * meanX
+
+    const trendValues = xs.map((x) => intercept + slope * x)
+    const residuals = ys.map((y, idx) => y - trendValues[idx])
+    const variance = residuals.reduce((sum, r) => sum + r * r, 0) / residuals.length
+    const stdDev = Math.sqrt(variance)
+
+    return chartData.map((point, idx) => {
+      const trend = Number(trendValues[idx].toFixed(2))
+      const upper = Number((trend + stdDev).toFixed(2))
+      const lower = Number((trend - stdDev).toFixed(2))
+
+      return {
+        ...point,
+        trend,
+        varianceRange: [lower, upper] as [number, number],
+      }
+    })
+  }, [chartData])
+
   if (chartData.length === 0) {
     return (
       <Card>
@@ -107,7 +148,7 @@ export function RunningTotalsChart({
         >
           <LineChart
             accessibilityLayer
-            data={chartData}
+            data={enhancedChartData}
             margin={{
               left: 12,
               right: 12,
@@ -137,9 +178,42 @@ export function RunningTotalsChart({
             <ChartTooltip
               content={
                 <ChartTooltipContent
-                  formatter={(value) => `$${Number(value).toLocaleString()}`}
+                  formatter={(value, name) => {
+                    if (Array.isArray(value) && value.length === 2) {
+                      const [low, high] = value
+                      return (
+                        <div className="flex w-full justify-between">
+                          <span className="text-muted-foreground">Variance</span>
+                          <span className="font-mono">${low.toFixed(2)} to ${high.toFixed(2)}</span>
+                        </div>
+                      )
+                    }
+                    return `$${Number(value).toLocaleString()}`
+                  }}
                 />
               }
+            />
+            <Area
+              type="monotone"
+              dataKey="varianceRange"
+              name="variance"
+              isRange
+              stroke="none"
+              fill="var(--color-variance)"
+              fillOpacity={0.08}
+              activeDot={false}
+              dot={false}
+              isAnimationActive={false}
+            />
+            <Line
+              dataKey="trend"
+              name="trend"
+              type="monotone"
+              stroke="var(--color-trend)"
+              strokeWidth={1.5}
+              strokeDasharray="5 5"
+              dot={false}
+              isAnimationActive={false}
             />
             <Line
               dataKey="total"
