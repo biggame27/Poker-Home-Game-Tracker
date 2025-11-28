@@ -24,6 +24,7 @@ export function JoinGameForm({ game, onSuccess }: JoinGameFormProps) {
   // Check if user is already in the game
   const isAlreadyJoined = game.sessions.some(s => s.userId === user?.id)
   const userSession = game.sessions.find(s => s.userId === user?.id)
+  const isClosed = game.status === 'completed'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -67,12 +68,30 @@ export function JoinGameForm({ game, onSuccess }: JoinGameFormProps) {
     }
   }
 
+  if (!isAlreadyJoined && isClosed) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Game Closed</CardTitle>
+          <CardDescription>This game is closed. New players cannot join.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Contact the host if you believe you should already be listed for this game.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   if (isAlreadyJoined && userSession) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Your Session</CardTitle>
-          <CardDescription>You've already joined this game</CardDescription>
+          <CardDescription>
+            {isClosed ? 'Game closed — edits are locked' : 'You\'ve already joined this game'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -94,38 +113,40 @@ export function JoinGameForm({ game, onSuccess }: JoinGameFormProps) {
                 ${userSession.profit.toFixed(2)}
               </p>
             </div>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="buyIn">Update Buy-In ($)</Label>
-                  <Input
-                    id="buyIn"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={buyIn}
-                    onChange={(e) => setBuyIn(e.target.value)}
-                    placeholder={userSession.buyIn.toString()}
-                  />
+            {!isClosed && (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="buyIn">Update Buy-In ($)</Label>
+                    <Input
+                      id="buyIn"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={buyIn}
+                      onChange={(e) => setBuyIn(e.target.value)}
+                      placeholder={userSession.buyIn.toString()}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="endAmount">Update End Amount ($)</Label>
+                    <Input
+                      id="endAmount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={endAmount}
+                      onChange={(e) => setEndAmount(e.target.value)}
+                      placeholder={userSession.endAmount.toString()}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="endAmount">Update End Amount ($)</Label>
-                  <Input
-                    id="endAmount"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={endAmount}
-                    onChange={(e) => setEndAmount(e.target.value)}
-                    placeholder={userSession.endAmount.toString()}
-                  />
-                </div>
-              </div>
-              <Button type="submit" disabled={loading} className="w-full gap-2">
-                <UserPlus className="h-4 w-4" />
-                {loading ? 'Updating...' : 'Update Session'}
-              </Button>
-            </form>
+                <Button type="submit" disabled={loading} className="w-full gap-2">
+                  <UserPlus className="h-4 w-4" />
+                  {loading ? 'Updating...' : 'Update Session'}
+                </Button>
+              </form>
+            )}
           </div>
         </CardContent>
       </Card>

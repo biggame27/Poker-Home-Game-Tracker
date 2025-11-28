@@ -229,6 +229,16 @@ export default function GroupDetailPage() {
                                 Open
                               </span>
                             )}
+                            {game.status === 'in-progress' && (
+                              <span className="text-xs px-2 py-1 bg-amber-500/10 text-amber-600 rounded-full">
+                                In Progress
+                              </span>
+                            )}
+                            {game.status === 'completed' && (
+                              <span className="text-xs px-2 py-1 bg-muted text-muted-foreground rounded-full">
+                                Closed
+                              </span>
+                            )}
                           </div>
                           <p className="text-sm text-muted-foreground mt-1">
                             {playerCount} player{playerCount !== 1 ? 's' : ''} • {game.notes || 'No notes'}

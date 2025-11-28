@@ -7,11 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { JoinGameForm } from '@/components/JoinGameForm'
 import { Leaderboard } from '@/components/Leaderboard'
-import { getGameById, getGroupById } from '@/lib/supabase/storage'
+import { getGameById, getGroupById, updateGameStatus } from '@/lib/supabase/storage'
 import type { Game, Group } from '@/types'
-import { Users, Calendar, ArrowLeft, Copy, Check } from 'lucide-react'
+import { Users, Calendar, ArrowLeft, Copy, Check, Lock, Unlock } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
+import { Badge } from '@/components/ui/badge'
 
 export default function GameDetailPage() {
   const params = useParams()
@@ -21,6 +22,7 @@ export default function GameDetailPage() {
   const [game, setGame] = useState<Game | null>(null)
   const [group, setGroup] = useState<Group | null>(null)
   const [copied, setCopied] = useState(false)
+  const [statusUpdating, setStatusUpdating] = useState(false)
 
   useEffect(() => {
     if (gameId) {
@@ -60,6 +62,24 @@ export default function GameDetailPage() {
       navigator.clipboard.writeText(url)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const changeGameStatus = async (status: 'open' | 'completed') => {
+    if (!gameId || !game) return
+    setStatusUpdating(true)
+    try {
+      const success = await updateGameStatus(gameId, status)
+      if (success) {
+        await refreshGame()
+      } else {
+        alert('Could not update the game status. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error updating game status:', error)
+      alert('Could not update the game status. Please try again.')
+    } finally {
+      setStatusUpdating(false)
     }
   }
 
@@ -123,6 +143,31 @@ export default function GameDetailPage() {
                   Group: {group.name}
                 </p>
               )}
+              <div className="flex items-center gap-3">
+                <Badge variant={game.status === 'completed' ? 'secondary' : 'default'}>
+                  {game.status === 'completed' ? 'Closed' : game.status === 'in-progress' ? 'In Progress' : 'Open'}
+                </Badge>
+                {isHost && (
+                  <Button
+                    variant={game.status === 'completed' ? 'outline' : 'destructive'}
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => changeGameStatus(game.status === 'completed' ? 'open' : 'completed')}
+                    disabled={statusUpdating}
+                  >
+                    {game.status === 'completed' ? (
+                      <Unlock className="h-4 w-4" />
+                    ) : (
+                      <Lock className="h-4 w-4" />
+                    )}
+                    {statusUpdating
+                      ? 'Updating...'
+                      : game.status === 'completed'
+                        ? 'Reopen Game'
+                        : 'Close Game'}
+                  </Button>
+                )}
+              </div>
               {game.notes && (
                 <p className="text-muted-foreground">{game.notes}</p>
               )}
