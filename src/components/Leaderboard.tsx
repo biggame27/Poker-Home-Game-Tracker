@@ -6,8 +6,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Trophy, TrendingUp, TrendingDown } from 'lucide-react'
 import type { Game, GameSession, PlayerStats } from '@/types'
 
+type LeaderboardItem = PlayerStats & {
+  buyIn?: number
+  endAmount?: number
+}
+
 export function Leaderboard({ games, hideCard = false, groupId, userId, singleGame = false }: { games: Game[]; hideCard?: boolean; groupId?: string; userId?: string; singleGame?: boolean }): ReactElement {
-  const leaderboard = useMemo(() => {
+  const leaderboard = useMemo((): LeaderboardItem[] => {
     // For single game view, just show the sessions directly
     if (singleGame && games.length === 1) {
       const game = games[0]
@@ -134,8 +139,8 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
                   </TableCell>
                   {singleGame ? (
                     <>
-                      <TableCell className="text-right">${player.buyIn.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">${player.endAmount.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">${(player.buyIn ?? 0).toFixed(2)}</TableCell>
+                      <TableCell className="text-right">${(player.endAmount ?? 0).toFixed(2)}</TableCell>
                     </>
                   ) : (
                     <>
