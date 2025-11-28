@@ -79,12 +79,27 @@ export default function GroupDetailPage() {
             setDeletingGameId(null)
           }
         },
+        className: 'sonner-action-delete',
       },
       cancel: {
         label: 'Cancel',
         onClick: () => {},
       },
     })
+    
+    // Add class to delete button after toast is rendered
+    setTimeout(() => {
+      const toastElements = document.querySelectorAll('[data-sonner-toast]')
+      const latestToast = toastElements[toastElements.length - 1]
+      if (latestToast) {
+        const actionButtons = latestToast.querySelectorAll('[data-button][data-sonner-action], button[data-sonner-action]')
+        actionButtons.forEach((button) => {
+          if (button.textContent?.trim() === 'Delete') {
+            button.classList.add('sonner-action-delete')
+          }
+        })
+      }
+    }, 100)
   }
 
   if (!isLoaded) {

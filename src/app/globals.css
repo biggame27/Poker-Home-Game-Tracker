@@ -120,3 +120,50 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Sonner toast styling - white backgrounds for all */
+.sonner-toast-white,
+[data-sonner-toast] {
+  background: white !important;
+}
+
+[data-sonner-toast][data-type="success"],
+[data-sonner-toast][data-type="error"],
+[data-sonner-toast][data-type="warning"],
+[data-sonner-toast][data-type="info"] {
+  background: white !important;
+}
+
+/* Success toast styling - green checkmark and gray border */
+[data-sonner-toast][data-type="success"] {
+  border: 1px solid hsl(var(--border)) !important;
+}
+
+[data-sonner-toast][data-type="success"] svg {
+  color: rgb(22 163 74) !important; /* green-600 */
+}
+
+/* Sonner toast action button styling for delete actions */
+/* Target by className */
+.sonner-action-delete,
+[data-sonner-toast] .sonner-action-delete,
+[data-sonner-toast] button.sonner-action-delete,
+[data-sonner-toast] [data-button].sonner-action-delete,
+[data-sonner-toast] [data-button][data-sonner-action].sonner-action-delete {
+  background-color: hsl(var(--destructive)) !important;
+  color: white !important;
+  border: none !important;
+}
+
+.sonner-action-delete:hover,
+[data-sonner-toast] button.sonner-action-delete:hover,
+[data-sonner-toast] [data-button].sonner-action-delete:hover,
+[data-sonner-toast] [data-button][data-sonner-action].sonner-action-delete:hover {
+  background-color: hsl(var(--destructive) / 0.9) !important;
+}
+
+/* Target action buttons that are the first child (typically the delete button) */
+[data-sonner-toast] [data-button][data-sonner-action]:first-child,
+[data-sonner-toast] button[data-sonner-action]:first-child {
+  /* Check if button text contains "Delete" - we'll use JS for this */
+}
