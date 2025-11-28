@@ -13,6 +13,7 @@ import type { Group, Game } from '@/types'
 import { Users, PlusCircle, Copy, Check, X, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
+import { toast } from 'sonner'
 
 export default function GroupDetailPage() {
   const params = useParams()
@@ -56,25 +57,34 @@ export default function GroupDetailPage() {
     e.preventDefault()
     e.stopPropagation()
     
-    if (!confirm('Are you sure you want to delete this game? This action cannot be undone.')) {
-      return
-    }
-    
-    setDeletingGameId(gameId)
-    try {
-      const success = await deleteGame(gameId)
-      if (success) {
-        // Reload games list
-        await loadData()
-      } else {
-        alert('Failed to delete game. Please try again.')
-      }
-    } catch (error) {
-      console.error('Error deleting game:', error)
-      alert('An error occurred while deleting the game.')
-    } finally {
-      setDeletingGameId(null)
-    }
+    toast('Are you sure you want to delete this game?', {
+      description: 'This action cannot be undone.',
+      action: {
+        label: 'Delete',
+        onClick: async () => {
+          setDeletingGameId(gameId)
+          try {
+            const success = await deleteGame(gameId)
+            if (success) {
+              toast.success('Game deleted successfully')
+              // Reload games list
+              await loadData()
+            } else {
+              toast.error('Failed to delete game. Please try again.')
+            }
+          } catch (error) {
+            console.error('Error deleting game:', error)
+            toast.error('An error occurred while deleting the game.')
+          } finally {
+            setDeletingGameId(null)
+          }
+        },
+      },
+      cancel: {
+        label: 'Cancel',
+        onClick: () => {},
+      },
+    })
   }
 
   if (!isLoaded) {

@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { updateGameSession, getGameById } from '@/lib/supabase/storage'
 import type { Game, GameSession } from '@/types'
 import { UserPlus } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface JoinGameFormProps {
   game: Game
@@ -28,7 +29,7 @@ export function JoinGameForm({ game, onSuccess }: JoinGameFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user?.id) {
-      alert('You must be logged in to join a game')
+      toast.error('You must be logged in to join a game')
       return
     }
 
@@ -50,7 +51,7 @@ export function JoinGameForm({ game, onSuccess }: JoinGameFormProps) {
       )
       
       if (!success) {
-        alert('Failed to join game. Please try again.')
+        toast.error('Failed to join game. Please try again.')
         return
       }
 
@@ -58,10 +59,11 @@ export function JoinGameForm({ game, onSuccess }: JoinGameFormProps) {
       setBuyIn('')
       setEndAmount('')
       
+      toast.success(isAlreadyJoined ? 'Session updated successfully!' : 'Successfully joined the game!')
       onSuccess()
     } catch (error) {
       console.error('Error joining game:', error)
-      alert('Failed to join game. Please try again.')
+      toast.error('Failed to join game. Please try again.')
     } finally {
       setLoading(false)
     }
