@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { createGroup, generateInviteCode } from '@/lib/supabase/storage'
 import { Users } from 'lucide-react'
+import { toast } from 'sonner'
 
 export function GroupForm({ onSuccess }: { onSuccess?: () => void }) {
   const { user } = useUser()
@@ -35,13 +36,15 @@ export function GroupForm({ onSuccess }: { onSuccess?: () => void }) {
       )
 
       if (!newGroup) {
-        alert('Failed to create group. Please try again.')
+        toast.error('Failed to create group. Please try again.')
         return
       }
 
       // Reset form
       setName('')
       setDescription('')
+      
+      toast.success('Group created successfully!')
 
       if (onSuccess) {
         onSuccess()

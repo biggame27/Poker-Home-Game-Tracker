@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { GroupSelector } from '@/components/GroupSelector'
 import { Plus, Trash2 } from 'lucide-react'
 import { addGame } from '@/lib/storage'
+import { toast } from 'sonner'
 
 interface PlayerSession {
   playerName: string
@@ -43,11 +44,11 @@ export function GameForm({ onSuccess, defaultGroupId }: { onSuccess?: () => void
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!groupId) {
-      alert('Please select a group')
+      toast.error('Please select a group')
       return
     }
     if (!user?.id) {
-      alert('You must be logged in to create a game')
+      toast.error('You must be logged in to create a game')
       return
     }
 
@@ -81,6 +82,8 @@ export function GameForm({ onSuccess, defaultGroupId }: { onSuccess?: () => void
       setGroupId(defaultGroupId || '')
       setPlayers([{ playerName: user?.fullName || '', buyIn: '', endAmount: '' }])
       setNotes('')
+      
+      toast.success('Game added successfully!')
       
       if (onSuccess) {
         onSuccess()

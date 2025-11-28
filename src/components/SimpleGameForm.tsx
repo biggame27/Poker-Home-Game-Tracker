@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { GroupSelector } from '@/components/GroupSelector'
 import { createGame } from '@/lib/supabase/storage'
 import type { Game, GameSession } from '@/types'
+import { toast } from 'sonner'
 
 interface SimpleGameFormProps {
   defaultGroupId?: string
@@ -26,11 +27,11 @@ export function SimpleGameForm({ defaultGroupId, onSuccess }: SimpleGameFormProp
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!groupId) {
-      alert('Please select a group')
+      toast.error('Please select a group')
       return
     }
     if (!user?.id) {
-      alert('You must be logged in to create a game')
+      toast.error('You must be logged in to create a game')
       return
     }
 
@@ -48,9 +49,11 @@ export function SimpleGameForm({ defaultGroupId, onSuccess }: SimpleGameFormProp
       )
       
       if (!game) {
-        alert('Failed to create game. Please try again.')
+        toast.error('Failed to create game. Please try again.')
         return
       }
+      
+      toast.success('Game created successfully!')
       
       // Redirect to game detail page
       if (onSuccess) {
