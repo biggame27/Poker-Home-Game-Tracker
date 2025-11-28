@@ -261,7 +261,7 @@ export default function GroupDetailPage() {
                               {playerCount} player{playerCount !== 1 ? 's' : ''} • {game.notes || 'No notes'}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-4">
                             {isBalanced ? (
                               <Check className="h-5 w-5 text-green-600" />
                             ) : (
@@ -272,24 +272,25 @@ export default function GroupDetailPage() {
                                 </p>
                               </>
                             )}
+                            {isOwner && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="opacity-0 group-hover:opacity-100 transition-all h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-md shadow-sm hover:shadow-md"
+                                onClick={(e) => handleDeleteGame(game.id, e)}
+                                disabled={deletingGameId === game.id}
+                                title="Delete game"
+                              >
+                                {deletingGameId === game.id ? (
+                                  <div className="h-4 w-4 border-2 border-destructive border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </Link>
-                      {isOwner && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={(e) => handleDeleteGame(game.id, e)}
-                          disabled={deletingGameId === game.id}
-                        >
-                          {deletingGameId === game.id ? (
-                            <div className="h-4 w-4 border-2 border-destructive border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </Button>
-                      )}
                     </div>
                   )
                 })}
