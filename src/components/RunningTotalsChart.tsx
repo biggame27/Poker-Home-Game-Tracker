@@ -29,20 +29,23 @@ export function RunningTotalsChart({
   title = cumulative ? 'Overall Running Total' : 'Running Totals by Date',
   description = cumulative 
     ? 'Cumulative profit/loss over time' 
-    : 'Profit/loss per game date'
+    : 'Profit/loss per game date',
+  userId
 }: RunningTotalsChartProps) {
   const chartData = useMemo(() => {
     if (!games || games.length === 0) {
       return []
     }
 
-    // Process games data into chart format
+    // Process games data into chart format, filtering by userId if provided
     const processed = games
       .flatMap(game => 
-        game.sessions?.map((session: GameSession) => ({
-          date: new Date(game.date),
-          profit: session.profit || (session.endAmount - session.buyIn)
-        })) || []
+        game.sessions
+          ?.filter((session: GameSession) => !userId || session.userId === userId)
+          ?.map((session: GameSession) => ({
+            date: new Date(game.date),
+            profit: session.profit || (session.endAmount - session.buyIn)
+          })) || []
       )
       .sort((a, b) => a.date.getTime() - b.date.getTime())
 
@@ -73,7 +76,7 @@ export function RunningTotalsChart({
         total: Number(total.toFixed(2))
       }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-  }, [games, cumulative])
+  }, [games, cumulative, userId])
 
   if (chartData.length === 0) {
     return (

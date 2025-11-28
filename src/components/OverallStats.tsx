@@ -7,12 +7,20 @@ import type { Game, GameSession } from '@/types'
 
 export function OverallStats({ games, groupId, userId }: { games: Game[]; groupId?: string; userId?: string }) {
   const stats = useMemo(() => {
-    const totalGames = games.length
-    const totalBuyIns = games.reduce((sum, game) => 
+    // Filter games to only include sessions from the current user if userId is provided
+    const filteredGames = userId 
+      ? games.map(game => ({
+          ...game,
+          sessions: game.sessions?.filter((sess: GameSession) => sess.userId === userId) || []
+        })).filter(game => game.sessions.length > 0)
+      : games
+
+    const totalGames = filteredGames.length
+    const totalBuyIns = filteredGames.reduce((sum, game) => 
       sum + (game.sessions?.reduce((s: number, sess: GameSession) => 
         s + (sess.buyIn || 0), 0) || 0), 0
     )
-    const totalEndAmounts = games.reduce((sum, game) => 
+    const totalEndAmounts = filteredGames.reduce((sum, game) => 
       sum + (game.sessions?.reduce((s: number, sess: GameSession) => 
         s + (sess.endAmount || 0), 0) || 0), 0
     )
@@ -26,7 +34,7 @@ export function OverallStats({ games, groupId, userId }: { games: Game[]; groupI
       totalProfit,
       avgProfitPerGame
     }
-  }, [games])
+  }, [games, userId])
 
   const statCards = [
     {

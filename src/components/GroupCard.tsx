@@ -35,11 +35,6 @@ export function GroupCard({ group }: GroupCardProps) {
   const totalGames = games.length
   const memberCount = group.members.length
 
-  // Calculate total profit for the group
-  const totalProfit = games.reduce((sum, game) => {
-    return sum + game.sessions.reduce((s: number, session: any) => s + (session.profit || 0), 0)
-  }, 0)
-
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader>
@@ -65,18 +60,6 @@ export function GroupCard({ group }: GroupCardProps) {
             </div>
           </div>
 
-          {totalGames > 0 && (
-            <div className="pt-2 border-t">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Total Profit</span>
-                <span className={`font-semibold ${
-                  totalProfit >= 0 ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  ${totalProfit.toFixed(2)}
-                </span>
-              </div>
-            </div>
-          )}
 
           <Link href={`/groups/${group.id}`}>
             <Button variant="outline" className="w-full gap-2">

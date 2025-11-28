@@ -8,7 +8,7 @@ import { Leaderboard } from '@/components/Leaderboard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { PlusCircle, Trophy, BarChart3 } from 'lucide-react'
+import { PlusCircle, Trophy, BarChart3, Check, X } from 'lucide-react'
 import { getGames } from '@/lib/supabase/storage'
 import type { Game } from '@/types'
 
@@ -115,10 +115,11 @@ export default function Dashboard() {
                   <div className="space-y-3">
                     {recentGames.length > 0 ? (
                       recentGames.map((game) => {
-                        const totalProfit = game.sessions.reduce(
+                        const totalSum = game.sessions.reduce(
                           (sum, s) => sum + (s.profit || 0),
                           0
                         )
+                        const isBalanced = Math.abs(totalSum) < 0.01 // Allow small floating point errors
                         return (
                           <div
                             key={game.id}
@@ -132,14 +133,17 @@ export default function Dashboard() {
                                 {game.sessions.length} player{game.sessions.length !== 1 ? 's' : ''}
                               </p>
                             </div>
-                            <div className="text-right">
-                              <p
-                                className={`font-semibold ${
-                                  totalProfit >= 0 ? 'text-green-600' : 'text-red-600'
-                                }`}
-                              >
-                                ${totalProfit.toFixed(2)}
-                              </p>
+                            <div className="flex items-center gap-2">
+                              {isBalanced ? (
+                                <Check className="h-5 w-5 text-green-600" />
+                              ) : (
+                                <>
+                                  <X className="h-5 w-5 text-red-600" />
+                                  <p className="font-semibold text-sm text-red-600">
+                                    ${totalSum.toFixed(2)}
+                                  </p>
+                                </>
+                              )}
                             </div>
                           </div>
                         )

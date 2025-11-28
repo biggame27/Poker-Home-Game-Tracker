@@ -10,7 +10,7 @@ import { RunningTotalsChart } from '@/components/RunningTotalsChart'
 import { OverallStats } from '@/components/OverallStats'
 import { getGroupById, getGamesByGroup } from '@/lib/supabase/storage'
 import type { Group, Game } from '@/types'
-import { Users, PlusCircle, Copy, Check } from 'lucide-react'
+import { Users, PlusCircle, Copy, Check, X } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 
@@ -207,7 +207,8 @@ export default function GroupDetailPage() {
               <div className="space-y-3">
                 {games.map((game) => {
                   const playerCount = game.sessions.length
-                  const totalProfit = game.sessions.reduce((sum, s) => sum + (s.profit || 0), 0)
+                  const totalSum = game.sessions.reduce((sum, s) => sum + (s.profit || 0), 0)
+                  const isBalanced = Math.abs(totalSum) < 0.01 // Allow small floating point errors
                   const userJoined = game.sessions.some(s => s.userId === user?.id)
                   
                   return (
@@ -233,12 +234,17 @@ export default function GroupDetailPage() {
                             {playerCount} player{playerCount !== 1 ? 's' : ''} • {game.notes || 'No notes'}
                           </p>
                         </div>
-                        <div className="text-right">
-                          <p className={`font-semibold ${
-                            totalProfit >= 0 ? 'text-green-600' : 'text-red-600'
-                          }`}>
-                            ${totalProfit.toFixed(2)}
-                          </p>
+                        <div className="flex items-center gap-2">
+                          {isBalanced ? (
+                            <Check className="h-5 w-5 text-green-600" />
+                          ) : (
+                            <>
+                              <X className="h-5 w-5 text-red-600" />
+                              <p className="font-semibold text-sm text-red-600">
+                                ${totalSum.toFixed(2)}
+                              </p>
+                            </>
+                          )}
                         </div>
                       </div>
                     </Link>
@@ -266,7 +272,7 @@ export default function GroupDetailPage() {
         {/* Statistics */}
         {games.length > 0 && (
           <>
-            <OverallStats games={games} />
+            <OverallStats games={games} userId={user?.id} />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <RunningTotalsChart 
@@ -274,12 +280,14 @@ export default function GroupDetailPage() {
                 cumulative={false}
                 title="Running Totals by Date"
                 description="Profit/loss per game date"
+                userId={user?.id}
               />
               <RunningTotalsChart 
                 games={games} 
                 cumulative={true}
                 title="Overall Running Total"
                 description="Cumulative profit/loss over time"
+                userId={user?.id}
               />
             </div>
 
