@@ -8,7 +8,7 @@ import { Leaderboard } from '@/components/Leaderboard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { PlusCircle, Trophy, BarChart3, Check, X } from 'lucide-react'
+import { PlusCircle, Check, X } from 'lucide-react'
 import { getGames } from '@/lib/supabase/storage'
 import type { Game } from '@/types'
 
@@ -88,12 +88,6 @@ export default function Dashboard() {
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-2xl font-semibold">Top Players</h2>
-                    <Link href="/leaderboard">
-                      <Button variant="ghost" size="sm" className="gap-2">
-                        View All
-                        <Trophy className="h-4 w-4" />
-                      </Button>
-                    </Link>
                   </div>
                   <div className="overflow-x-auto">
                     <Leaderboard games={games} hideCard />
@@ -105,12 +99,6 @@ export default function Dashboard() {
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-2xl font-semibold">Recent Games</h2>
-                    <Link href="/statistics">
-                      <Button variant="ghost" size="sm" className="gap-2">
-                        View Stats
-                        <BarChart3 className="h-4 w-4" />
-                      </Button>
-                    </Link>
                   </div>
                   <div className="space-y-3">
                     {recentGames.length > 0 ? (
