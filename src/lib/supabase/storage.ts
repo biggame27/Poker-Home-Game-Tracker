@@ -538,6 +538,23 @@ export async function updateGameSession(
   endAmount: number
 ): Promise<boolean> {
   const supabase = createClient()
+
+  // Prevent edits to closed games
+  const { data: gameStatusRow, error: statusError } = await supabase
+    .from('games')
+    .select('status')
+    .eq('id', gameId)
+    .single()
+
+  if (statusError || !gameStatusRow) {
+    console.error('Error verifying game status:', statusError)
+    return false
+  }
+
+  if (gameStatusRow.status === 'completed') {
+    console.warn('Attempted to edit a completed game; aborting update.')
+    return false
+  }
   
   // Check if session exists
   const { data: existing } = await supabase
@@ -580,6 +597,25 @@ export async function updateGameSession(
     }
   }
   
+  return true
+}
+
+export async function updateGameStatus(
+  gameId: string,
+  status: 'open' | 'in-progress' | 'completed'
+): Promise<boolean> {
+  const supabase = createClient()
+
+  const { error } = await supabase
+    .from('games')
+    .update({ status })
+    .eq('id', gameId)
+
+  if (error) {
+    console.error('Error updating game status:', error)
+    return false
+  }
+
   return true
 }
 
