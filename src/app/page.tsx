@@ -4,7 +4,6 @@ import { useUser } from '@clerk/nextjs'
 import { useState, useEffect } from 'react'
 import { OverallStats } from '@/components/OverallStats'
 import { RunningTotalsChart } from '@/components/RunningTotalsChart'
-import { Leaderboard } from '@/components/Leaderboard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
@@ -64,7 +63,7 @@ export default function Dashboard() {
         {/* Quick Stats */}
         {games.length > 0 ? (
           <>
-            <OverallStats games={games} />
+            <OverallStats games={games} userId={user?.id} />
 
             {/* Quick Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -73,78 +72,67 @@ export default function Dashboard() {
                 cumulative={true}
                 title="Overall Running Total"
                 description="Cumulative profit/loss over time"
+                userId={user?.id}
               />
               <RunningTotalsChart 
                 games={games} 
                 cumulative={false}
                 title="Recent Game Totals"
                 description="Profit/loss per game date"
+                userId={user?.id}
               />
             </div>
 
-            {/* Quick Leaderboard Preview */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-2xl font-semibold">Top Players</h2>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <Leaderboard games={games} hideCard />
-                  </div>
+            {/* Recent Games */}
+            <Card>
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-2xl font-semibold">Recent Games</h2>
                 </div>
-              </Card>
-
-              <Card>
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-2xl font-semibold">Recent Games</h2>
-                  </div>
-                  <div className="space-y-3">
-                    {recentGames.length > 0 ? (
-                      recentGames.map((game) => {
-                        const totalSum = game.sessions.reduce(
-                          (sum, s) => sum + (s.profit || 0),
-                          0
-                        )
-                        const isBalanced = Math.abs(totalSum) < 0.01 // Allow small floating point errors
-                        return (
-                          <div
-                            key={game.id}
-                            className="flex items-center justify-between p-3 border rounded-lg"
-                          >
-                            <div>
-                              <p className="font-medium">
-                                {new Date(game.date).toLocaleDateString()}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {game.sessions.length} player{game.sessions.length !== 1 ? 's' : ''}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {isBalanced ? (
-                                <Check className="h-5 w-5 text-green-600" />
-                              ) : (
-                                <>
-                                  <X className="h-5 w-5 text-red-600" />
-                                  <p className="font-semibold text-sm text-red-600">
-                                    ${totalSum.toFixed(2)}
-                                  </p>
-                                </>
-                              )}
-                            </div>
+                <div className="space-y-3">
+                  {recentGames.length > 0 ? (
+                    recentGames.map((game) => {
+                      const totalSum = game.sessions.reduce(
+                        (sum, s) => sum + (s.profit || 0),
+                        0
+                      )
+                      const isBalanced = Math.abs(totalSum) < 0.01 // Allow small floating point errors
+                      return (
+                        <div
+                          key={game.id}
+                          className="flex items-center justify-between p-3 border rounded-lg"
+                        >
+                          <div>
+                            <p className="font-medium">
+                              {new Date(game.date).toLocaleDateString()}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {game.sessions.length} player{game.sessions.length !== 1 ? 's' : ''}
+                            </p>
                           </div>
-                        )
-                      })
-                    ) : (
-                      <p className="text-muted-foreground text-center py-4">
-                        No recent games
-                      </p>
-                    )}
-                  </div>
+                          <div className="flex items-center gap-2">
+                            {isBalanced ? (
+                              <Check className="h-5 w-5 text-green-600" />
+                            ) : (
+                              <>
+                                <X className="h-5 w-5 text-red-600" />
+                                <p className="font-semibold text-sm text-red-600">
+                                  ${totalSum.toFixed(2)}
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <p className="text-muted-foreground text-center py-4">
+                      No recent games
+                    </p>
+                  )}
                 </div>
-              </Card>
-            </div>
+              </div>
+            </Card>
           </>
         ) : (
           <Card>
