@@ -1,12 +1,12 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, type ReactElement } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Trophy, TrendingUp, TrendingDown } from 'lucide-react'
 import type { Game, GameSession, PlayerStats } from '@/types'
 
-export function Leaderboard({ games, hideCard = false, groupId, userId, singleGame = false }: { games: Game[]; hideCard?: boolean; groupId?: string; userId?: string; singleGame?: boolean }): JSX.Element {
+export function Leaderboard({ games, hideCard = false, groupId, userId, singleGame = false }: { games: Game[]; hideCard?: boolean; groupId?: string; userId?: string; singleGame?: boolean }): ReactElement {
   const leaderboard = useMemo(() => {
     // For single game view, just show the sessions directly
     if (singleGame && games.length === 1) {
