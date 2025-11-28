@@ -181,10 +181,12 @@ export function RunningTotalsChart({
                   formatter={(value, name) => {
                     if (Array.isArray(value) && value.length === 2) {
                       const [low, high] = value
+                      const lowNum = typeof low === 'number' ? low : Number(low)
+                      const highNum = typeof high === 'number' ? high : Number(high)
                       return (
                         <div className="flex w-full justify-between">
                           <span className="text-muted-foreground">Variance</span>
-                          <span className="font-mono">${low.toFixed(2)} to ${high.toFixed(2)}</span>
+                          <span className="font-mono">${lowNum.toFixed(2)} to ${highNum.toFixed(2)}</span>
                         </div>
                       )
                     }

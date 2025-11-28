@@ -179,3 +179,4 @@ CREATE POLICY "Users can manage sessions"
   USING (true) -- We'll validate in application code
   WITH CHECK (true);
 
+

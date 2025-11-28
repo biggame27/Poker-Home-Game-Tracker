@@ -8,3 +8,4 @@ export async function getSupabaseWithAuth() {
   return { supabase, userId }
 }
 
+
