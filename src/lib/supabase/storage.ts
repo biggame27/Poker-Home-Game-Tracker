@@ -583,3 +583,31 @@ export async function updateGameSession(
   return true
 }
 
+export async function deleteGame(gameId: string): Promise<boolean> {
+  const supabase = createClient()
+  
+  // First delete all game sessions (due to foreign key constraints)
+  const { error: sessionsError } = await supabase
+    .from('game_sessions')
+    .delete()
+    .eq('game_id', gameId)
+  
+  if (sessionsError) {
+    console.error('Error deleting game sessions:', sessionsError)
+    return false
+  }
+  
+  // Then delete the game
+  const { error: gameError } = await supabase
+    .from('games')
+    .delete()
+    .eq('id', gameId)
+  
+  if (gameError) {
+    console.error('Error deleting game:', gameError)
+    return false
+  }
+  
+  return true
+}
+

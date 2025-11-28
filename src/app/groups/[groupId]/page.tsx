@@ -8,9 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Leaderboard } from '@/components/Leaderboard'
 import { RunningTotalsChart } from '@/components/RunningTotalsChart'
 import { OverallStats } from '@/components/OverallStats'
-import { getGroupById, getGamesByGroup } from '@/lib/supabase/storage'
+import { getGroupById, getGamesByGroup, deleteGame } from '@/lib/supabase/storage'
 import type { Group, Game } from '@/types'
-import { Users, PlusCircle, Copy, Check, X } from 'lucide-react'
+import { Users, PlusCircle, Copy, Check, X, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 
@@ -22,6 +22,7 @@ export default function GroupDetailPage() {
   const [group, setGroup] = useState<Group | null>(null)
   const [games, setGames] = useState<Game[]>([])
   const [copied, setCopied] = useState(false)
+  const [deletingGameId, setDeletingGameId] = useState<string | null>(null)
 
   useEffect(() => {
     if (groupId) {
@@ -48,6 +49,31 @@ export default function GroupDetailPage() {
       navigator.clipboard.writeText(group.inviteCode)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const handleDeleteGame = async (gameId: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (!confirm('Are you sure you want to delete this game? This action cannot be undone.')) {
+      return
+    }
+    
+    setDeletingGameId(gameId)
+    try {
+      const success = await deleteGame(gameId)
+      if (success) {
+        // Reload games list
+        await loadData()
+      } else {
+        alert('Failed to delete game. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error deleting game:', error)
+      alert('An error occurred while deleting the game.')
+    } finally {
+      setDeletingGameId(null)
     }
   }
 
@@ -212,42 +238,59 @@ export default function GroupDetailPage() {
                   const userJoined = game.sessions.some(s => s.userId === user?.id)
                   
                   return (
-                    <Link key={game.id} href={`/games/${game.id}`}>
-                      <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <p className="font-medium">
-                              {format(new Date(game.date), 'MMMM dd, yyyy')}
+                    <div key={game.id} className="relative group">
+                      <Link href={`/games/${game.id}`}>
+                        <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3">
+                              <p className="font-medium">
+                                {format(new Date(game.date), 'MMMM dd, yyyy')}
+                              </p>
+                              {userJoined && (
+                                <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                                  Joined
+                                </span>
+                              )}
+                              {game.status === 'open' && (
+                                <span className="text-xs px-2 py-1 bg-green-500/10 text-green-600 rounded-full">
+                                  Open
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {playerCount} player{playerCount !== 1 ? 's' : ''} • {game.notes || 'No notes'}
                             </p>
-                            {userJoined && (
-                              <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
-                                Joined
-                              </span>
-                            )}
-                            {game.status === 'open' && (
-                              <span className="text-xs px-2 py-1 bg-green-500/10 text-green-600 rounded-full">
-                                Open
-                              </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {isBalanced ? (
+                              <Check className="h-5 w-5 text-green-600" />
+                            ) : (
+                              <>
+                                <X className="h-5 w-5 text-red-600" />
+                                <p className="font-semibold text-sm text-red-600">
+                                  ${totalSum.toFixed(2)}
+                                </p>
+                              </>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {playerCount} player{playerCount !== 1 ? 's' : ''} • {game.notes || 'No notes'}
-                          </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {isBalanced ? (
-                            <Check className="h-5 w-5 text-green-600" />
+                      </Link>
+                      {isOwner && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={(e) => handleDeleteGame(game.id, e)}
+                          disabled={deletingGameId === game.id}
+                        >
+                          {deletingGameId === game.id ? (
+                            <div className="h-4 w-4 border-2 border-destructive border-t-transparent rounded-full animate-spin" />
                           ) : (
-                            <>
-                              <X className="h-5 w-5 text-red-600" />
-                              <p className="font-semibold text-sm text-red-600">
-                                ${totalSum.toFixed(2)}
-                              </p>
-                            </>
+                            <Trash2 className="h-4 w-4" />
                           )}
-                        </div>
-                      </div>
-                    </Link>
+                        </Button>
+                      )}
+                    </div>
                   )
                 })}
               </div>
