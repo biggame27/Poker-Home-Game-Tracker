@@ -79,7 +79,6 @@ export default function GroupDetailPage() {
             setDeletingGameId(null)
           }
         },
-        className: 'sonner-action-delete',
       },
       cancel: {
         label: 'Cancel',
