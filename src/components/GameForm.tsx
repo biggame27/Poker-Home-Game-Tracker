@@ -67,7 +67,8 @@ export function GameForm({ onSuccess, defaultGroupId }: { onSuccess?: () => void
           profit: (parseFloat(p.endAmount) || 0) - (parseFloat(p.buyIn) || 0),
           userId: p.playerName === user.fullName ? user.id : undefined
         })),
-        notes: notes || undefined
+        notes: notes || undefined,
+        status: 'completed' as const
       }
 
       addGame(gameData)
