@@ -19,7 +19,7 @@ interface RunningTotalsChartProps {
 const chartConfig = {
   total: {
     label: 'Total',
-    color: 'hsl(var(--chart-1))',
+    color: 'var(--chart-1)',
   },
 } satisfies ChartConfig
 
@@ -54,7 +54,7 @@ export function RunningTotalsChart({
       return processed.map(item => {
         runningTotal += item.profit
         return {
-          date: format(item.date, 'MMM dd, yyyy'),
+          date: item.date.toISOString(),
           total: Number(runningTotal.toFixed(2))
         }
       })
@@ -72,7 +72,7 @@ export function RunningTotalsChart({
 
     return Object.values(byDate)
       .map(({ date, total }) => ({
-        date: format(date, 'MMM dd, yyyy'),
+        date: date.toISOString(),
         total: Number(total.toFixed(2))
       }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -100,38 +100,53 @@ export function RunningTotalsChart({
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={chartConfig} className="min-h-[300px] w-full">
+      <CardContent className="px-2 sm:p-6">
+        <ChartContainer
+          config={chartConfig}
+          className="aspect-auto h-[250px] w-full"
+        >
           <LineChart
             accessibilityLayer
             data={chartData}
-            margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
+            margin={{
+              left: 12,
+              right: 12,
+            }}
           >
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis 
-              dataKey="date" 
+            <CartesianGrid vertical={false} />
+            <XAxis
+              dataKey="date"
               tickLine={false}
               axisLine={false}
               tickMargin={8}
+              minTickGap={32}
+              tickFormatter={(value) => {
+                const date = new Date(value)
+                return date.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                })
+              }}
             />
-            <YAxis 
+            <YAxis
               tickLine={false}
               axisLine={false}
               tickMargin={8}
               tickFormatter={(value) => `$${value}`}
             />
-            <ChartTooltip 
-              content={<ChartTooltipContent 
-                formatter={(value) => `$${Number(value).toLocaleString()}`}
-              />} 
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  formatter={(value) => `$${Number(value).toLocaleString()}`}
+                />
+              }
             />
-            <Line 
-              type="monotone" 
-              dataKey="total" 
+            <Line
+              dataKey="total"
+              type="monotone"
               stroke="var(--color-total)"
               strokeWidth={2}
-              dot={{ r: 4 }}
-              activeDot={{ r: 6 }}
+              dot={false}
             />
           </LineChart>
         </ChartContainer>
