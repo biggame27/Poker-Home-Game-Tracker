@@ -2,7 +2,7 @@
 import { createClient } from './client'
 import { createClient as createServerClient } from './server'
 import { auth } from '@clerk/nextjs/server'
-import type { Game, Group, GameSession, GroupMember } from '@/types'
+import type { Game, Group, GameSession, GroupMember, PlayerProfile } from '@/types'
 
 // Ensure date-only values don't shift across timezones when converted to Date objects
 const normalizeDateString = (value: string) =>
@@ -327,6 +327,92 @@ export async function generateInviteCode(): Promise<string> {
   return timestamp.substring(0, 6)
 }
 
+export async function searchPlayers(query: string): Promise<PlayerProfile[]> {
+  const supabase = createClient()
+
+  const trimmed = query.trim()
+  if (!trimmed) return []
+
+  const term = `%${trimmed}%`
+
+  const [userResp, memberResp] = await Promise.all([
+    supabase
+      .from('users')
+      .select('id, clerk_id, full_name, email')
+      .or(`full_name.ilike.${term},email.ilike.${term}`)
+      .limit(25),
+    supabase
+      .from('group_members')
+      .select('user_id, user_name')
+      .not('user_id', 'is', null)
+      .ilike('user_name', term)
+      .limit(25),
+  ])
+
+  const users = userResp.data || []
+  const members = memberResp.data || []
+
+  const combined = new Map<string, PlayerProfile>()
+
+  users.forEach((row) => {
+    combined.set(row.clerk_id, {
+      id: row.id,
+      clerkId: row.clerk_id,
+      fullName: row.full_name || 'Unnamed player',
+      email: row.email || '',
+    })
+  })
+
+  members.forEach((row: any) => {
+    if (!row.user_id) return
+    if (!combined.has(row.user_id)) {
+      combined.set(row.user_id, {
+        id: row.user_id,
+        clerkId: row.user_id,
+        fullName: row.user_name || 'Player',
+        email: '',
+      })
+    }
+  })
+
+  return Array.from(combined.values()).slice(0, 25)
+}
+
+export async function getPlayerProfile(clerkId: string): Promise<PlayerProfile | null> {
+  const supabase = createClient()
+
+  // Try primary user record
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, clerk_id, full_name, email, created_at')
+    .eq('clerk_id', clerkId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Error fetching player profile:', error)
+  }
+
+  // Fallback to a known display name from group membership if needed
+  const { data: memberRow } = await supabase
+    .from('group_members')
+    .select('user_name')
+    .eq('user_id', clerkId)
+    .limit(1)
+    .maybeSingle()
+
+  if (!data && !memberRow) {
+    return null
+  }
+
+  return {
+    id: data?.id || clerkId,
+    clerkId: data?.clerk_id || clerkId,
+    fullName: data?.full_name || memberRow?.user_name || 'Unnamed player',
+    email: data?.email || '',
+    createdAt: data?.created_at || undefined,
+  }
+}
+
 export async function getOrCreatePersonalGroup(
   userId: string,
   userName: string
@@ -495,14 +581,43 @@ export async function getGameById(gameId: string): Promise<Game | null> {
 
 export async function getGamesByUser(userId: string): Promise<Game[]> {
   const supabase = createClient()
-  
+
+  // Find game IDs where the user played
+  const { data: sessionRows, error: sessionError } = await supabase
+    .from('game_sessions')
+    .select('game_id')
+    .eq('user_id', userId)
+
+  if (sessionError) {
+    console.error('Error fetching user sessions:', sessionError)
+    return []
+  }
+
+  // Find game IDs the user created
+  const { data: createdRows, error: createdError } = await supabase
+    .from('games')
+    .select('id')
+    .eq('created_by', userId)
+
+  if (createdError) {
+    console.error('Error fetching user games:', createdError)
+    return []
+  }
+
+  const gameIds = [
+    ...(sessionRows || []).map((row) => row.game_id),
+    ...(createdRows || []).map((row) => row.id),
+  ]
+
+  if (gameIds.length === 0) return []
+
   const { data: games, error } = await supabase
     .from('games')
     .select(`
       *,
       game_sessions (*)
     `)
-    .or(`created_by.eq.${userId},game_sessions.user_id.eq.${userId}`)
+    .in('id', gameIds)
     .order('date', { ascending: false })
   
   if (error) {
@@ -510,12 +625,7 @@ export async function getGamesByUser(userId: string): Promise<Game[]> {
     return []
   }
   
-  // Filter to only games where user has a session or created
   return (games || [])
-    .filter(g => 
-      g.created_by === userId || 
-      (g.game_sessions || []).some((s: any) => s.user_id === userId)
-    )
     .map(g => ({
       id: g.id,
       groupId: g.group_id,

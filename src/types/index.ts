@@ -36,6 +36,14 @@ export interface GroupMember {
   role: 'owner' | 'member'
 }
 
+export interface PlayerProfile {
+  id: string
+  clerkId: string
+  fullName: string
+  email: string
+  createdAt?: string
+}
+
 export interface PlayerStats {
   name: string
   userId?: string
