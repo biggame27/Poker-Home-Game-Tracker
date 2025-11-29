@@ -5,13 +5,15 @@ import { usePathname } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
 import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from '@clerk/nextjs'
-import { Home, PlusCircle, Users } from 'lucide-react'
+import { Home, PlusCircle, Users, User as UserIcon, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: Home },
   { href: '/groups', label: 'Groups', icon: Users },
   { href: '/games/new', label: 'New Game', icon: PlusCircle },
+  { href: '/players', label: 'Players', icon: Search },
+  { href: '/profile', label: 'Profile', icon: UserIcon },
 ]
 
 export function Navbar() {

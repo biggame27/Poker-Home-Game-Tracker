@@ -328,7 +328,9 @@ export default function GroupDetailPage() {
                   className="flex items-center justify-between p-3 border rounded-lg"
                 >
                   <div>
-                    <p className="font-medium">{member.userName}</p>
+                    <Link href={`/players/${member.userId}`}>
+                      <p className="font-medium hover:underline">{member.userName}</p>
+                    </Link>
                     <p className="text-sm text-muted-foreground">
                       Joined {format(new Date(member.joinedAt), 'MMM dd, yyyy')}
                     </p>

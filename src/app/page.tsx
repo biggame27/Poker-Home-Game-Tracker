@@ -2,12 +2,10 @@
 
 import { useUser } from '@clerk/nextjs'
 import { useState, useEffect } from 'react'
-import { OverallStats } from '@/components/OverallStats'
-import { RunningTotalsChart } from '@/components/RunningTotalsChart'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { PlusCircle, Check, X } from 'lucide-react'
+import { PlusCircle, Heart, Flame, Sparkles, Trophy } from 'lucide-react'
 import { getGames, getOrCreatePersonalGroup } from '@/lib/supabase/storage'
 import type { Game } from '@/types'
 import { useRouter } from 'next/navigation'
@@ -25,12 +23,55 @@ export default function Dashboard() {
   const [personalEnd, setPersonalEnd] = useState('')
   const [personalDate, setPersonalDate] = useState(new Date().toISOString().split('T')[0])
   const [personalSaving, setPersonalSaving] = useState(false)
+  const [reactions, setReactions] = useState<Record<string, { like: number; hype: number; clap: number }>>({})
+  const [comments, setComments] = useState<Record<string, { id: string; text: string; createdAt: string }[]>>({})
+  const [draftComments, setDraftComments] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (isLoaded && user?.id) {
       loadGames()
     }
   }, [isLoaded, user?.id])
+
+  const socialGames = games.slice(0, 5)
+
+  useEffect(() => {
+    const updates: Record<string, { like: number; hype: number; clap: number }> = {}
+    socialGames.forEach((game) => {
+      if (!reactions[game.id]) {
+        updates[game.id] = { like: 0, hype: 0, clap: 0 }
+      }
+    })
+    if (Object.keys(updates).length) {
+      setReactions((prev) => ({ ...updates, ...prev }))
+    }
+  }, [socialGames, reactions])
+
+  const addReaction = (gameId: string, type: 'like' | 'hype' | 'clap') => {
+    setReactions((prev) => ({
+      ...prev,
+      [gameId]: {
+        like: (prev[gameId]?.like ?? 0) + (type === 'like' ? 1 : 0),
+        hype: (prev[gameId]?.hype ?? 0) + (type === 'hype' ? 1 : 0),
+        clap: (prev[gameId]?.clap ?? 0) + (type === 'clap' ? 1 : 0),
+      },
+    }))
+  }
+
+  const addComment = (gameId: string) => {
+    const text = draftComments[gameId]?.trim()
+    if (!text) return
+    const entry = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+      text,
+      createdAt: new Date().toISOString(),
+    }
+    setComments((prev) => ({
+      ...prev,
+      [gameId]: [...(prev[gameId] || []), entry],
+    }))
+    setDraftComments((prev) => ({ ...prev, [gameId]: '' }))
+  }
 
   const loadGames = async () => {
     if (!user?.id) return
@@ -106,8 +147,6 @@ export default function Dashboard() {
       </div>
     )
   }
-
-  const recentGames = games.slice(-5).reverse()
 
   return (
     <div className="min-h-screen bg-background">
@@ -210,74 +249,107 @@ export default function Dashboard() {
         {/* Quick Stats */}
         {games.length > 0 ? (
           <>
-            <OverallStats games={games} userId={user?.id} />
-
-            {/* Quick Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <RunningTotalsChart 
-                games={games} 
-                cumulative={true}
-                title="Overall Running Total"
-                description="Cumulative profit/loss over time"
-                userId={user?.id}
-              />
-              <RunningTotalsChart 
-                games={games} 
-                cumulative={false}
-                title="Recent Game Totals"
-                description="Profit/loss per game date"
-                userId={user?.id}
-              />
-            </div>
-
-            {/* Recent Games */}
+            {/* Social Interactions moved from profile */}
             <Card>
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-2xl font-semibold">Recent Games</h2>
+              <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    <h2 className="text-2xl font-semibold">Social Interactions</h2>
+                  </div>
+                  <p className="text-sm text-muted-foreground">React or comment on sessions</p>
                 </div>
-                <div className="space-y-3">
-                  {recentGames.length > 0 ? (
-                    recentGames.map((game) => {
-                      const totalSum = game.sessions.reduce(
-                        (sum, s) => sum + (s.profit || 0),
-                        0
-                      )
-                      const isBalanced = Math.abs(totalSum) < 0.01 // Allow small floating point errors
+                {socialGames.length === 0 ? (
+                  <div className="text-muted-foreground">No sessions yet.</div>
+                ) : (
+                  <div className="space-y-4">
+                    {socialGames.map((game) => {
+                      const userSession = game.sessions.find((s) => s.userId === user?.id)
+                      const userProfit = userSession
+                        ? userSession.profit ?? (userSession.endAmount - userSession.buyIn)
+                        : null
+                      const playerCount = game.sessions.length
                       return (
-                        <div
-                          key={game.id}
-                          className="flex items-center justify-between p-3 border rounded-lg"
-                        >
-                          <div>
-                            <p className="font-medium">
-                              {new Date(game.date).toLocaleDateString()}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {game.sessions.length} player{game.sessions.length !== 1 ? 's' : ''}
-                            </p>
+                        <div key={game.id} className="rounded-lg border p-3 space-y-3">
+                          <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                            <div>
+                              <p className="font-semibold">
+                                {new Date(game.date).toLocaleDateString()}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {playerCount} player{playerCount === 1 ? '' : 's'}
+                                {userProfit !== null && (
+                                  <> · Your profit {userProfit >= 0 ? '+' : ''}${userProfit.toFixed(2)}</>
+                                )}
+                              </p>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {isBalanced ? (
-                              <Check className="h-5 w-5 text-green-600" />
-                            ) : (
-                              <>
-                                <X className="h-5 w-5 text-red-600" />
-                                <p className="font-semibold text-sm text-red-600">
-                                  ${totalSum.toFixed(2)}
-                                </p>
-                              </>
-                            )}
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1"
+                              onClick={() => addReaction(game.id, 'like')}
+                            >
+                              <Heart className="h-4 w-4" />
+                              Like {reactions[game.id]?.like ? reactions[game.id].like : ''}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1"
+                              onClick={() => addReaction(game.id, 'hype')}
+                            >
+                              <Flame className="h-4 w-4" />
+                              Hype {reactions[game.id]?.hype ? reactions[game.id].hype : ''}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="gap-1"
+                              onClick={() => addReaction(game.id, 'clap')}
+                            >
+                              <Trophy className="h-4 w-4" />
+                              Clap {reactions[game.id]?.clap ? reactions[game.id].clap : ''}
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex gap-2">
+                              <Input
+                                value={draftComments[game.id] || ''}
+                                onChange={(e) =>
+                                  setDraftComments((prev) => ({ ...prev, [game.id]: e.target.value }))
+                                }
+                                placeholder="Add a comment"
+                              />
+                              <Button type="button" onClick={() => addComment(game.id)} size="sm">
+                                Post
+                              </Button>
+                            </div>
+                            <div className="space-y-1">
+                              {(comments[game.id] || []).length === 0 ? (
+                                <p className="text-xs text-muted-foreground">No comments yet.</p>
+                              ) : (
+                                comments[game.id].map((c) => (
+                                  <div key={c.id} className="text-sm">
+                                    <span className="font-semibold">Player</span>{' '}
+                                    <span className="text-muted-foreground">
+                                      {new Date(c.createdAt).toLocaleString()}
+                                    </span>
+                                    <div>{c.text}</div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
                           </div>
                         </div>
                       )
-                    })
-                  ) : (
-                    <p className="text-muted-foreground text-center py-4">
-                      No recent games
-                    </p>
-                  )}
-                </div>
+                    })}
+                  </div>
+                )}
               </div>
             </Card>
           </>
