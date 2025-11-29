@@ -323,6 +323,49 @@ export async function generateInviteCode(): Promise<string> {
   return timestamp.substring(0, 6)
 }
 
+export async function getOrCreatePersonalGroup(
+  userId: string,
+  userName: string
+): Promise<Group | null> {
+  const supabase = createClient()
+
+  // Check for existing personal group by creator and name
+  const { data: existing, error: existingError } = await supabase
+    .from('groups')
+    .select('*')
+    .eq('created_by', userId)
+    .eq('name', 'Personal Games')
+    .maybeSingle()
+
+  if (existingError) {
+    console.error('Error checking personal group:', existingError)
+  }
+
+  if (existing) {
+    // Ensure membership record exists
+    const { data: member } = await supabase
+      .from('group_members')
+      .select('id')
+      .eq('group_id', existing.id)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (!member) {
+      await supabase.from('group_members').insert({
+        group_id: existing.id,
+        user_id: userId,
+        user_name: userName,
+        role: 'owner',
+      })
+    }
+
+    return getGroupById(existing.id)
+  }
+
+  const inviteCode = await generateInviteCode()
+  return createGroup('Personal Games', 'Your personal poker sessions', userId, userName, inviteCode)
+}
+
 // ============ GAMES ============
 
 export async function getGames(userId: string): Promise<Game[]> {
