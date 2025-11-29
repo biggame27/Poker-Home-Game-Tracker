@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { createGroup, generateInviteCode } from '@/lib/supabase/storage'
 import { Users } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 export function GroupForm({ onSuccess }: { onSuccess?: () => void }) {
   const { user } = useUser()

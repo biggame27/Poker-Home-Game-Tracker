@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { GroupSelector } from '@/components/GroupSelector'
 import { createGame } from '@/lib/supabase/storage'
 import type { Game, GameSession } from '@/types'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 interface SimpleGameFormProps {
   defaultGroupId?: string

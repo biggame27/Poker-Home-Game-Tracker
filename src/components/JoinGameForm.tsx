@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { updateGameSession, getGameById } from '@/lib/supabase/storage'
 import type { Game, GameSession } from '@/types'
 import { UserPlus } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 interface JoinGameFormProps {
   game: Game

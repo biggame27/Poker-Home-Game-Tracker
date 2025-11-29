@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { GroupSelector } from '@/components/GroupSelector'
 import { Plus, Trash2 } from 'lucide-react'
 import { addGame } from '@/lib/storage'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 interface PlayerSession {
   playerName: string

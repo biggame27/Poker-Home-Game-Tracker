@@ -13,7 +13,6 @@ import type { Group, Game } from '@/types'
 import { Users, PlusCircle, Copy, Check, X, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import { toast } from 'sonner'
 
 export default function GroupDetailPage() {
   const params = useParams()
@@ -24,6 +23,8 @@ export default function GroupDetailPage() {
   const [games, setGames] = useState<Game[]>([])
   const [copied, setCopied] = useState(false)
   const [deletingGameId, setDeletingGameId] = useState<string | null>(null)
+  const [notification, setNotification] = useState<{ type: 'error'; message: string } | null>(null)
+  const [confirmingGameId, setConfirmingGameId] = useState<string | null>(null)
 
   useEffect(() => {
     if (groupId) {
@@ -56,49 +57,27 @@ export default function GroupDetailPage() {
   const handleDeleteGame = async (gameId: string, e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    
-    toast('Are you sure you want to delete this game?', {
-      description: 'This action cannot be undone.',
-      action: {
-        label: 'Delete',
-        onClick: async () => {
-          setDeletingGameId(gameId)
-          try {
-            const success = await deleteGame(gameId)
-            if (success) {
-              toast.success('Game deleted successfully')
-              // Reload games list
-              await loadData()
-            } else {
-              toast.error('Failed to delete game. Please try again.')
-            }
-          } catch (error) {
-            console.error('Error deleting game:', error)
-            toast.error('An error occurred while deleting the game.')
-          } finally {
-            setDeletingGameId(null)
-          }
-        },
-      },
-      cancel: {
-        label: 'Cancel',
-        onClick: () => {},
-      },
-    })
-    
-    // Add class to delete button after toast is rendered
-    setTimeout(() => {
-      const toastElements = document.querySelectorAll('[data-sonner-toast]')
-      const latestToast = toastElements[toastElements.length - 1]
-      if (latestToast) {
-        const actionButtons = latestToast.querySelectorAll('[data-button][data-sonner-action], button[data-sonner-action]')
-        actionButtons.forEach((button) => {
-          if (button.textContent?.trim() === 'Delete') {
-            button.classList.add('sonner-action-delete')
-          }
-        })
+
+    setConfirmingGameId(gameId)
+  }
+
+  const confirmDelete = async () => {
+    if (!confirmingGameId) return
+    setDeletingGameId(confirmingGameId)
+    try {
+      const success = await deleteGame(confirmingGameId)
+      if (success) {
+        await loadData()
+      } else {
+        setNotification({ type: 'error', message: 'Failed to delete game. Please try again.' })
       }
-    }, 100)
+    } catch (error) {
+      console.error('Error deleting game:', error)
+      setNotification({ type: 'error', message: 'An error occurred while deleting the game.' })
+    } finally {
+      setDeletingGameId(null)
+      setConfirmingGameId(null)
+    }
   }
 
   if (!isLoaded) {
@@ -137,6 +116,49 @@ export default function GroupDetailPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
+        {notification && (
+          <div
+            className="flex items-center justify-between border rounded-lg px-4 py-3 bg-red-50 border-red-200 text-red-700"
+          >
+            <span>{notification.message}</span>
+            <button
+              type="button"
+              className="text-sm underline"
+              onClick={() => setNotification(null)}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {confirmingGameId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+            <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
+              <h3 className="text-lg font-semibold mb-2">Delete game?</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                This action cannot be undone. Are you sure you want to delete this game?
+              </p>
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setConfirmingGameId(null)}
+                  disabled={deletingGameId !== null}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={confirmDelete}
+                  disabled={deletingGameId !== null}
+                  className="min-w-[100px]"
+                >
+                  {deletingGameId ? 'Deleting...' : 'Delete'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="space-y-4">
           <div className="flex items-start justify-between">

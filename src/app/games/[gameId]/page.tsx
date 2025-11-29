@@ -66,10 +66,10 @@ export default function GameDetailPage() {
   }
 
   const changeGameStatus = async (status: 'open' | 'completed') => {
-    if (!gameId || !game) return
+    if (!gameId || !game || !user?.id) return
     setStatusUpdating(true)
     try {
-      const success = await updateGameStatus(gameId, status)
+      const success = await updateGameStatus(gameId, status, user.id)
       if (success) {
         await refreshGame()
       } else {
@@ -114,6 +114,9 @@ export default function GameDetailPage() {
   }
 
   const isHost = game.createdBy === user?.id
+  const isGroupOwner = group
+    ? group.createdBy === user?.id || group.members.some(m => m.userId === user?.id && m.role === 'owner')
+    : false
   const totalPlayers = game.sessions.length
   const totalBuyIns = game.sessions.reduce((sum, s) => sum + (s.buyIn || 0), 0)
   const totalEndAmounts = game.sessions.reduce((sum, s) => sum + (s.endAmount || 0), 0)
@@ -147,7 +150,7 @@ export default function GameDetailPage() {
                 <Badge variant={game.status === 'completed' ? 'secondary' : 'default'}>
                   {game.status === 'completed' ? 'Closed' : game.status === 'in-progress' ? 'In Progress' : 'Open'}
                 </Badge>
-                {isHost && (
+                {isGroupOwner && (
                   <Button
                     variant={game.status === 'completed' ? 'outline' : 'destructive'}
                     size="sm"

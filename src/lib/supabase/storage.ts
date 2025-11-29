@@ -4,6 +4,10 @@ import { createClient as createServerClient } from './server'
 import { auth } from '@clerk/nextjs/server'
 import type { Game, Group, GameSession, GroupMember } from '@/types'
 
+// Ensure date-only values don't shift across timezones when converted to Date objects
+const normalizeDateString = (value: string) =>
+  value.includes('T') ? value : `${value}T00:00:00`
+
 // Helper to ensure user exists in database
 async function ensureUser(clerkId: string, email?: string, fullName?: string) {
   try {
@@ -357,7 +361,7 @@ export async function getGames(userId: string): Promise<Game[]> {
   return (games || []).map(g => ({
     id: g.id,
     groupId: g.group_id,
-    date: g.date,
+    date: normalizeDateString(g.date),
     notes: g.notes || undefined,
     createdBy: g.created_by,
     createdAt: g.created_at,
@@ -392,7 +396,7 @@ export async function getGamesByGroup(groupId: string): Promise<Game[]> {
   return (games || []).map(g => ({
     id: g.id,
     groupId: g.group_id,
-    date: g.date,
+    date: normalizeDateString(g.date),
     notes: g.notes || undefined,
     createdBy: g.created_by,
     createdAt: g.created_at,
@@ -427,7 +431,7 @@ export async function getGameById(gameId: string): Promise<Game | null> {
   return {
     id: game.id,
     groupId: game.group_id,
-    date: game.date,
+    date: normalizeDateString(game.date),
     notes: game.notes || undefined,
     createdBy: game.created_by,
     createdAt: game.created_at,
@@ -468,7 +472,7 @@ export async function getGamesByUser(userId: string): Promise<Game[]> {
     .map(g => ({
       id: g.id,
       groupId: g.group_id,
-      date: g.date,
+      date: normalizeDateString(g.date),
       notes: g.notes || undefined,
       createdBy: g.created_by,
       createdAt: g.created_at,
@@ -602,9 +606,51 @@ export async function updateGameSession(
 
 export async function updateGameStatus(
   gameId: string,
-  status: 'open' | 'in-progress' | 'completed'
+  status: 'open' | 'in-progress' | 'completed',
+  userId: string
 ): Promise<boolean> {
   const supabase = createClient()
+
+  // Ensure only the group owner can change status
+  const { data: gameRow, error: fetchError } = await supabase
+    .from('games')
+    .select('group_id')
+    .eq('id', gameId)
+    .single()
+
+  if (fetchError || !gameRow) {
+    console.error('Error verifying game owner:', fetchError)
+    return false
+  }
+
+  const groupId = gameRow.group_id
+
+  const { data: groupRow, error: groupError } = await supabase
+    .from('groups')
+    .select('created_by')
+    .eq('id', groupId)
+    .single()
+
+  if (groupError || !groupRow) {
+    console.error('Error verifying group owner:', groupError)
+    return false
+  }
+
+  const { data: memberRow } = await supabase
+    .from('group_members')
+    .select('role')
+    .eq('group_id', groupId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  const isGroupOwner =
+    groupRow.created_by === userId ||
+    (memberRow?.role === 'owner')
+
+  if (!isGroupOwner) {
+    console.warn('Unauthorized status update attempt.')
+    return false
+  }
 
   const { error } = await supabase
     .from('games')
