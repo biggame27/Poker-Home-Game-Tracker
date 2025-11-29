@@ -736,7 +736,82 @@ export async function deleteGame(gameId: string): Promise<boolean> {
     console.error('Error deleting game:', gameError)
     return false
   }
-  
+
+  return true
+}
+
+export async function deleteGroup(groupId: string, userId: string): Promise<boolean> {
+  const supabase = createClient()
+
+  // Verify ownership
+  const { data: groupRow, error: groupFetchError } = await supabase
+    .from('groups')
+    .select('created_by')
+    .eq('id', groupId)
+    .single()
+
+  if (groupFetchError || !groupRow || groupRow.created_by !== userId) {
+    console.error('Unauthorized or failed to verify group owner:', groupFetchError)
+    return false
+  }
+
+  // Delete game sessions for all games in the group
+  const { data: groupGames, error: gamesFetchError } = await supabase
+    .from('games')
+    .select('id')
+    .eq('group_id', groupId)
+
+  if (gamesFetchError) {
+    console.error('Error fetching games for group deletion:', gamesFetchError)
+    return false
+  }
+
+  const gameIds = (groupGames || []).map(g => g.id)
+
+  if (gameIds.length > 0) {
+    const { error: deleteSessionsError } = await supabase
+      .from('game_sessions')
+      .delete()
+      .in('game_id', gameIds)
+
+    if (deleteSessionsError) {
+      console.error('Error deleting game sessions for group:', deleteSessionsError)
+      return false
+    }
+
+    const { error: deleteGamesError } = await supabase
+      .from('games')
+      .delete()
+      .eq('group_id', groupId)
+
+    if (deleteGamesError) {
+      console.error('Error deleting games for group:', deleteGamesError)
+      return false
+    }
+  }
+
+  // Delete members
+  const { error: membersError } = await supabase
+    .from('group_members')
+    .delete()
+    .eq('group_id', groupId)
+
+  if (membersError) {
+    console.error('Error deleting group members:', membersError)
+    return false
+  }
+
+  // Delete group
+  const { error: groupDeleteError } = await supabase
+    .from('groups')
+    .delete()
+    .eq('id', groupId)
+
+  if (groupDeleteError) {
+    console.error('Error deleting group:', groupDeleteError)
+    return false
+  }
+
   return true
 }
 

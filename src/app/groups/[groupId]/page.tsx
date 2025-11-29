@@ -8,9 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Leaderboard } from '@/components/Leaderboard'
 import { RunningTotalsChart } from '@/components/RunningTotalsChart'
 import { OverallStats } from '@/components/OverallStats'
-import { getGroupById, getGamesByGroup, deleteGame } from '@/lib/supabase/storage'
+import { getGroupById, getGamesByGroup, deleteGame, deleteGroup, updateGroup } from '@/lib/supabase/storage'
 import type { Group, Game } from '@/types'
-import { Users, PlusCircle, Copy, Check, X, Trash2 } from 'lucide-react'
+import { Users, PlusCircle, Copy, Check, X, Trash2, EllipsisVertical } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 
@@ -25,6 +25,8 @@ export default function GroupDetailPage() {
   const [deletingGameId, setDeletingGameId] = useState<string | null>(null)
   const [notification, setNotification] = useState<{ type: 'error'; message: string } | null>(null)
   const [confirmingGameId, setConfirmingGameId] = useState<string | null>(null)
+  const [deletingGroup, setDeletingGroup] = useState(false)
+  const [groupMenuOpen, setGroupMenuOpen] = useState(false)
 
   useEffect(() => {
     if (groupId) {
@@ -78,6 +80,54 @@ export default function GroupDetailPage() {
       setDeletingGameId(null)
       setConfirmingGameId(null)
     }
+  }
+
+  const handleDeleteGroup = async () => {
+    if (!group || !user?.id) return
+    const confirmed = typeof window === 'undefined'
+      ? true
+      : window.confirm('Delete this group and all its games? This cannot be undone.')
+
+    if (!confirmed) return
+
+    setDeletingGroup(true)
+    try {
+      const success = await deleteGroup(group.id, user.id)
+      if (success) {
+        router.push('/groups')
+      } else {
+        setNotification({ type: 'error', message: 'Failed to delete group. Please try again.' })
+      }
+    } catch (error) {
+      console.error('Error deleting group:', error)
+      setNotification({ type: 'error', message: 'An error occurred while deleting the group.' })
+    } finally {
+      setDeletingGroup(false)
+    }
+  }
+
+  const handleRenameGroup = async () => {
+    if (!group || !user?.id) return
+    const newName = typeof window !== 'undefined'
+      ? window.prompt('Rename group to:', group.name)
+      : null
+
+    if (!newName || newName.trim() === '' || newName === group.name) {
+      setGroupMenuOpen(false)
+      return
+    }
+
+    const updated = await updateGroup({
+      ...group,
+      name: newName.trim(),
+    })
+
+    if (updated) {
+      setGroup(prev => prev ? { ...prev, name: newName.trim() } : prev)
+    } else {
+      setNotification({ type: 'error', message: 'Failed to rename group. Please try again.' })
+    }
+    setGroupMenuOpen(false)
   }
 
   if (!isLoaded) {
@@ -161,19 +211,55 @@ export default function GroupDetailPage() {
 
         {/* Header */}
         <div className="space-y-4">
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between relative">
             <div className="space-y-2">
               <h1 className="text-4xl font-bold tracking-tight">{group.name}</h1>
               {group.description && (
                 <p className="text-muted-foreground">{group.description}</p>
               )}
             </div>
-            <Link href="/games/new">
-              <Button className="gap-2">
-                <PlusCircle className="h-4 w-4" />
-                New Game
-              </Button>
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href="/games/new">
+                <Button className="gap-2">
+                  <PlusCircle className="h-4 w-4" />
+                  New Game
+                </Button>
+              </Link>
+              {isOwner && (
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setGroupMenuOpen(prev => !prev)}
+                    disabled={deletingGroup}
+                    aria-label="Group actions"
+                    className="h-9 w-9"
+                  >
+                    <EllipsisVertical className="h-4 w-4" />
+                  </Button>
+                  {groupMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 rounded-md border bg-background shadow-lg z-20">
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                        onClick={handleRenameGroup}
+                      >
+                        Rename Group
+                      </button>
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-muted"
+                        onClick={() => {
+                          setGroupMenuOpen(false)
+                          handleDeleteGroup()
+                        }}
+                        disabled={deletingGroup}
+                      >
+                        {deletingGroup ? 'Deleting...' : 'Delete Group'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Group Info */}
