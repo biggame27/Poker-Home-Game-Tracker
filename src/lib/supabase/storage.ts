@@ -8,6 +8,8 @@ import type { Game, Group, GameSession, GroupMember } from '@/types'
 const normalizeDateString = (value: string) =>
   value.includes('T') ? value : `${value}T00:00:00`
 
+const PERSONAL_GROUP_NAME = 'Personal Games'
+
 // Helper to ensure user exists in database
 async function ensureUser(clerkId: string, email?: string, fullName?: string) {
   try {
@@ -87,20 +89,22 @@ export async function getGroups(userId: string): Promise<Group[]> {
   }
   
   // Transform to match our Group type
-  return (groups || []).map(g => ({
-    id: g.id,
-    name: g.name,
-    description: g.description || undefined,
-    createdBy: g.created_by,
-    createdAt: g.created_at,
-    inviteCode: g.invite_code,
-    members: (g.group_members || []).map((m: any) => ({
-      userId: m.user_id,
-      userName: m.user_name,
-      joinedAt: m.joined_at,
-      role: m.role as 'owner' | 'member'
+  return (groups || [])
+    .filter(g => !(g.created_by === userId && g.name === PERSONAL_GROUP_NAME))
+    .map(g => ({
+      id: g.id,
+      name: g.name,
+      description: g.description || undefined,
+      createdBy: g.created_by,
+      createdAt: g.created_at,
+      inviteCode: g.invite_code,
+      members: (g.group_members || []).map((m: any) => ({
+        userId: m.user_id,
+        userName: m.user_name,
+        joinedAt: m.joined_at,
+        role: m.role as 'owner' | 'member'
+      }))
     }))
-  }))
 }
 
 export async function getGroupById(groupId: string): Promise<Group | null> {
