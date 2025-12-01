@@ -258,11 +258,15 @@ export default function Dashboard() {
                 <div className="space-y-3">
                   {paginatedGames.length > 0 ? (
                     paginatedGames.map((game) => {
-                      const totalSum = game.sessions.reduce(
+                      const userSessions = game.sessions.filter(
+                        (s) => s.userId === user?.id
+                      )
+                      const userProfit = userSessions.reduce(
                         (sum, s) => sum + (s.profit || 0),
                         0
                       )
-                      const isBalanced = Math.abs(totalSum) < 0.01 // Allow small floating point errors
+                      const hasUserSession = userSessions.length > 0
+
                       return (
                         <div
                           key={game.id}
@@ -273,19 +277,31 @@ export default function Dashboard() {
                               {new Date(game.date).toLocaleDateString()}
                             </p>
                             <p className="text-sm text-muted-foreground">
-                              {game.sessions.length} player{game.sessions.length !== 1 ? 's' : ''}
+                              {game.sessions.length} player
+                              {game.sessions.length !== 1 ? 's' : ''}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {isBalanced ? (
-                              <Check className="h-5 w-5 text-green-600" />
-                            ) : (
+                          <div className="flex flex-col items-end gap-1">
+                            {hasUserSession ? (
                               <>
-                                <X className="h-5 w-5 text-red-600" />
-                                <p className="font-semibold text-sm text-red-600">
-                                  ${totalSum.toFixed(2)}
-                                </p>
+                                <span className="text-xs text-muted-foreground">
+                                  Your profit
+                                </span>
+                                <span
+                                  className={`text-sm font-semibold ${
+                                    userProfit >= 0
+                                      ? 'text-green-600'
+                                      : 'text-red-600'
+                                  }`}
+                                >
+                                  {userProfit >= 0 ? '+' : '-'}$
+                                  {Math.abs(userProfit).toFixed(2)}
+                                </span>
                               </>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                You didn&apos;t play
+                              </span>
                             )}
                           </div>
                         </div>
