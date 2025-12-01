@@ -539,7 +539,8 @@ export async function createGame(
   date: string,
   notes: string | undefined,
   userId: string,
-  userName: string
+  userName: string,
+  status: 'open' | 'in-progress' | 'completed' = 'open'
 ): Promise<Game | null> {
   const supabase = createClient()
   
@@ -552,7 +553,7 @@ export async function createGame(
       group_id: groupId,
       date,
       notes: notes || null,
-      status: 'open',
+      status,
       created_by: userId,
     })
     .select()

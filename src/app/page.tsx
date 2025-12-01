@@ -1,19 +1,19 @@
 'use client'
 
 import { useUser } from '@clerk/nextjs'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { OverallStats } from '@/components/OverallStats'
 import { RunningTotalsChart } from '@/components/RunningTotalsChart'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { PlusCircle, Check, X } from 'lucide-react'
+import { PlusCircle, Check, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { getGames, getOrCreatePersonalGroup } from '@/lib/supabase/storage'
 import type { Game } from '@/types'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createGame, updateGameSession } from '@/lib/supabase/storage'
+import { createGame, updateGameSession, updateGameStatus } from '@/lib/supabase/storage'
 
 export default function Dashboard() {
   const { user, isLoaded } = useUser()
@@ -25,12 +25,7 @@ export default function Dashboard() {
   const [personalEnd, setPersonalEnd] = useState('')
   const [personalDate, setPersonalDate] = useState(new Date().toISOString().split('T')[0])
   const [personalSaving, setPersonalSaving] = useState(false)
-
-  useEffect(() => {
-    if (isLoaded && user?.id) {
-      loadGames()
-    }
-  }, [isLoaded, user?.id])
+  const [currentPage, setCurrentPage] = useState(1)
 
   const loadGames = async () => {
     if (!user?.id) return
@@ -41,6 +36,21 @@ export default function Dashboard() {
       console.error('Error loading games:', error)
     }
   }
+
+  useEffect(() => {
+    if (isLoaded && user?.id) {
+      loadGames()
+    }
+  }, [isLoaded, user?.id])
+
+  // Reset to page 1 if current page is out of bounds
+  const gamesPerPage = 5
+  const totalPages = useMemo(() => Math.ceil(games.length / gamesPerPage), [games.length, gamesPerPage])
+  useEffect(() => {
+    if (games.length > 0 && currentPage > totalPages) {
+      setCurrentPage(1)
+    }
+  }, [games.length, currentPage, totalPages])
 
   const handlePersonalGame = async () => {
     if (!user?.id) return
@@ -86,6 +96,8 @@ export default function Dashboard() {
           buyIn,
           endAmount
         )
+        // Mark personal game as completed
+        await updateGameStatus(game.id, 'completed', user.id)
         await loadGames()
       }
     } catch (error) {
@@ -99,6 +111,10 @@ export default function Dashboard() {
     }
   }
 
+  const startIndex = (currentPage - 1) * gamesPerPage
+  const endIndex = startIndex + gamesPerPage
+  const paginatedGames = games.slice(startIndex, endIndex)
+
   if (!isLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -106,8 +122,6 @@ export default function Dashboard() {
       </div>
     )
   }
-
-  const recentGames = games.slice(-5).reverse()
 
   return (
     <div className="min-h-screen bg-background">
@@ -235,10 +249,15 @@ export default function Dashboard() {
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-2xl font-semibold">Recent Games</h2>
+                  {totalPages > 1 && (
+                    <p className="text-sm text-muted-foreground">
+                      Page {currentPage} of {totalPages}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-3">
-                  {recentGames.length > 0 ? (
-                    recentGames.map((game) => {
+                  {paginatedGames.length > 0 ? (
+                    paginatedGames.map((game) => {
                       const totalSum = game.sessions.reduce(
                         (sum, s) => sum + (s.profit || 0),
                         0
@@ -278,6 +297,90 @@ export default function Dashboard() {
                     </p>
                   )}
                 </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="gap-2"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const pages: (number | string)[] = []
+                        const maxVisible = 7
+                        
+                        if (totalPages <= maxVisible) {
+                          // Show all pages if total is small
+                          for (let i = 1; i <= totalPages; i++) {
+                            pages.push(i)
+                          }
+                        } else {
+                          // Show first page
+                          pages.push(1)
+                          
+                          if (currentPage <= 3) {
+                            // Near the start
+                            for (let i = 2; i <= 4; i++) {
+                              pages.push(i)
+                            }
+                            pages.push('...')
+                            pages.push(totalPages)
+                          } else if (currentPage >= totalPages - 2) {
+                            // Near the end
+                            pages.push('...')
+                            for (let i = totalPages - 3; i <= totalPages; i++) {
+                              pages.push(i)
+                            }
+                          } else {
+                            // In the middle
+                            pages.push('...')
+                            for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                              pages.push(i)
+                            }
+                            pages.push('...')
+                            pages.push(totalPages)
+                          }
+                        }
+                        
+                        return pages.map((page, index) => {
+                          if (page === '...') {
+                            return (
+                              <span key={`ellipsis-${index}`} className="px-2 text-muted-foreground">
+                                ...
+                              </span>
+                            )
+                          }
+                          return (
+                            <Button
+                              key={page}
+                              variant={currentPage === page ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(page as number)}
+                              className="min-w-[2.5rem]"
+                            >
+                              {page}
+                            </Button>
+                          )
+                        })
+                      })()}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                      className="gap-2"
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </Card>
           </>
