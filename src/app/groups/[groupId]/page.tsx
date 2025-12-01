@@ -219,12 +219,6 @@ export default function GroupDetailPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Link href="/games/new">
-                <Button className="gap-2">
-                  <PlusCircle className="h-4 w-4" />
-                  New Game
-                </Button>
-              </Link>
               {isOwner && (
                 <div className="relative">
                   <Button
