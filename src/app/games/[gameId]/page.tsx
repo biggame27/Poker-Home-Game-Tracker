@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,15 +14,20 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 
-export default function GameDetailPage() {
+function GameDetailContent() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, isLoaded } = useUser()
   const gameId = params.gameId as string
   const [game, setGame] = useState<Game | null>(null)
   const [group, setGroup] = useState<Group | null>(null)
   const [copied, setCopied] = useState(false)
   const [statusUpdating, setStatusUpdating] = useState(false)
+  
+  // Get the referrer from query params
+  const from = searchParams.get('from') || null
+  const groupId = searchParams.get('groupId') || null
 
   useEffect(() => {
     if (gameId) {
@@ -128,12 +133,25 @@ export default function GameDetailPage() {
         {/* Header */}
         <div className="space-y-4">
           <div className="flex items-center gap-4">
-            <Link href={group ? `/groups/${group.id}` : '/'}>
-              <Button variant="ghost" size="sm" className="gap-2">
-                <ArrowLeft className="h-4 w-4" />
-                Back
-              </Button>
-            </Link>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="gap-2"
+              onClick={() => {
+                if (from === 'group' && groupId) {
+                  router.push(`/groups/${groupId}`)
+                } else if (from === 'dashboard') {
+                  router.push('/')
+                } else if (group) {
+                  router.push(`/groups/${group.id}`)
+                } else {
+                  router.push('/')
+                }
+              }}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
+            </Button>
           </div>
           
           <div className="flex items-start justify-between">
@@ -248,6 +266,18 @@ export default function GameDetailPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function GameDetailPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    }>
+      <GameDetailContent />
+    </Suspense>
   )
 }
 

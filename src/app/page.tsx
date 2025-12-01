@@ -268,43 +268,46 @@ export default function Dashboard() {
                       const hasUserSession = userSessions.length > 0
 
                       return (
-                        <div
+                        <Link
                           key={game.id}
-                          className="flex items-center justify-between p-3 border rounded-lg"
+                          href={`/games/${game.id}?from=dashboard`}
+                          className="block"
                         >
-                          <div>
-                            <p className="font-medium">
-                              {new Date(game.date).toLocaleDateString()}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {game.sessions.length} player
-                              {game.sessions.length !== 1 ? 's' : ''}
-                            </p>
-                          </div>
-                          <div className="flex flex-col items-end gap-1">
-                            {hasUserSession ? (
-                              <>
+                          <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors">
+                            <div>
+                              <p className="font-medium">
+                                {new Date(game.date).toLocaleDateString()}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {game.sessions.length} player
+                                {game.sessions.length !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              {hasUserSession ? (
+                                <>
+                                  <span className="text-xs text-muted-foreground">
+                                    Your profit
+                                  </span>
+                                  <span
+                                    className={`text-sm font-semibold ${
+                                      userProfit >= 0
+                                        ? 'text-green-600'
+                                        : 'text-red-600'
+                                    }`}
+                                  >
+                                    {userProfit >= 0 ? '+' : '-'}$
+                                    {Math.abs(userProfit).toFixed(2)}
+                                  </span>
+                                </>
+                              ) : (
                                 <span className="text-xs text-muted-foreground">
-                                  Your profit
+                                  You didn&apos;t play
                                 </span>
-                                <span
-                                  className={`text-sm font-semibold ${
-                                    userProfit >= 0
-                                      ? 'text-green-600'
-                                      : 'text-red-600'
-                                  }`}
-                                >
-                                  {userProfit >= 0 ? '+' : '-'}$
-                                  {Math.abs(userProfit).toFixed(2)}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                You didn&apos;t play
-                              </span>
-                            )}
+                              )}
+                            </div>
                           </div>
-                        </div>
+                        </Link>
                       )
                     })
                   ) : (

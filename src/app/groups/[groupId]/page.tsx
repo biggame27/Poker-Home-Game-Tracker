@@ -371,7 +371,7 @@ export default function GroupDetailPage() {
                   
                   return (
                     <div key={game.id} className="relative group">
-                      <Link href={`/games/${game.id}`}>
+                      <Link href={`/games/${game.id}?from=group&groupId=${groupId}`}>
                         <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
                           <div className="flex-1">
                             <div className="flex items-center gap-3">
