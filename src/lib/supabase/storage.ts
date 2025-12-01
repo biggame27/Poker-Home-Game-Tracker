@@ -89,8 +89,7 @@ export async function getGroups(userId: string): Promise<Group[]> {
   }
   
   // Transform to match our Group type
-  return (groups || [])
-    .filter(g => !(g.created_by === userId && g.name === PERSONAL_GROUP_NAME))
+  const transformed = (groups || [])
     .map(g => ({
       id: g.id,
       name: g.name,
@@ -105,6 +104,21 @@ export async function getGroups(userId: string): Promise<Group[]> {
         role: m.role as 'owner' | 'member'
       }))
     }))
+
+  // Ensure the personal games group (if it exists) appears first in the list
+  // We identify it as the group created by the user with the PERSONAL_GROUP_NAME
+  transformed.sort((a, b) => {
+    const aIsPersonal = a.createdBy === userId && a.name === PERSONAL_GROUP_NAME
+    const bIsPersonal = b.createdBy === userId && b.name === PERSONAL_GROUP_NAME
+
+    if (aIsPersonal && !bIsPersonal) return -1
+    if (!aIsPersonal && bIsPersonal) return 1
+
+    // Otherwise, keep original relative order by createdAt (newest first)
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  })
+
+  return transformed
 }
 
 export async function getGroupById(groupId: string): Promise<Group | null> {
@@ -539,7 +553,8 @@ export async function createGame(
   date: string,
   notes: string | undefined,
   userId: string,
-  userName: string
+  userName: string,
+  status: 'open' | 'in-progress' | 'completed' = 'open'
 ): Promise<Game | null> {
   const supabase = createClient()
   
@@ -552,7 +567,7 @@ export async function createGame(
       group_id: groupId,
       date,
       notes: notes || null,
-      status: 'open',
+      status,
       created_by: userId,
     })
     .select()
