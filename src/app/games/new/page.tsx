@@ -4,22 +4,12 @@ import { Suspense, useState } from 'react'
 import { SimpleGameForm } from '@/components/SimpleGameForm'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 
 function NewGameContent() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const groupId = searchParams.get('groupId') || undefined
   const [gameType, setGameType] = useState<'personal' | 'group'>(groupId ? 'group' : 'personal')
-
-  const handleSuccess = () => {
-    // Redirect to group page if groupId exists, otherwise dashboard
-    if (groupId) {
-      router.push(`/groups/${groupId}`)
-    } else {
-      router.push('/')
-    }
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -46,10 +36,10 @@ function NewGameContent() {
                   <TabsTrigger value="group">Group Game</TabsTrigger>
                 </TabsList>
                 <TabsContent value="personal">
-                  <SimpleGameForm onSuccess={handleSuccess} gameType="personal" />
+                  <SimpleGameForm gameType="personal" />
                 </TabsContent>
                 <TabsContent value="group">
-                  <SimpleGameForm onSuccess={handleSuccess} defaultGroupId={groupId} gameType="group" />
+                  <SimpleGameForm defaultGroupId={groupId} gameType="group" />
                 </TabsContent>
               </Tabs>
             </CardContent>
