@@ -90,7 +90,6 @@ export async function getGroups(userId: string): Promise<Group[]> {
   
   // Transform to match our Group type
   return (groups || [])
-    .filter(g => !(g.created_by === userId && g.name === PERSONAL_GROUP_NAME))
     .map(g => ({
       id: g.id,
       name: g.name,

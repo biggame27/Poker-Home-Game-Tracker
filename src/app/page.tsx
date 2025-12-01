@@ -45,12 +45,18 @@ export default function Dashboard() {
 
   // Reset to page 1 if current page is out of bounds
   const gamesPerPage = 5
-  const totalPages = useMemo(() => Math.ceil(games.length / gamesPerPage), [games.length, gamesPerPage])
+  // Filter games to only show ones where the user played
+  const userGames = useMemo(() => 
+    games.filter((game) => game.sessions.some((s) => s.userId === user?.id)),
+    [games, user?.id]
+  )
+  const totalPages = useMemo(() => Math.ceil(userGames.length / gamesPerPage), [userGames.length, gamesPerPage])
   useEffect(() => {
-    if (games.length > 0 && currentPage > totalPages) {
+    if (userGames.length > 0 && currentPage > totalPages) {
       setCurrentPage(1)
     }
-  }, [games.length, currentPage, totalPages])
+  }, [userGames.length, currentPage, totalPages])
+
 
   const handlePersonalGame = async () => {
     if (!user?.id) return
@@ -113,7 +119,7 @@ export default function Dashboard() {
 
   const startIndex = (currentPage - 1) * gamesPerPage
   const endIndex = startIndex + gamesPerPage
-  const paginatedGames = games.slice(startIndex, endIndex)
+  const paginatedGames = userGames.slice(startIndex, endIndex)
 
   if (!isLoaded) {
     return (
@@ -265,7 +271,6 @@ export default function Dashboard() {
                         (sum, s) => sum + (s.profit || 0),
                         0
                       )
-                      const hasUserSession = userSessions.length > 0
 
                       return (
                         <Link
@@ -284,27 +289,19 @@ export default function Dashboard() {
                               </p>
                             </div>
                             <div className="flex flex-col items-end gap-1">
-                              {hasUserSession ? (
-                                <>
-                                  <span className="text-xs text-muted-foreground">
-                                    Your profit
-                                  </span>
-                                  <span
-                                    className={`text-sm font-semibold ${
-                                      userProfit >= 0
-                                        ? 'text-green-600'
-                                        : 'text-red-600'
-                                    }`}
-                                  >
-                                    {userProfit >= 0 ? '+' : '-'}$
-                                    {Math.abs(userProfit).toFixed(2)}
-                                  </span>
-                                </>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">
-                                  You didn&apos;t play
-                                </span>
-                              )}
+                              <span className="text-xs text-muted-foreground">
+                                Your profit
+                              </span>
+                              <span
+                                className={`text-sm font-semibold ${
+                                  userProfit >= 0
+                                    ? 'text-green-600'
+                                    : 'text-red-600'
+                                }`}
+                              >
+                                {userProfit >= 0 ? '+' : '-'}$
+                                {Math.abs(userProfit).toFixed(2)}
+                              </span>
                             </div>
                           </div>
                         </Link>
