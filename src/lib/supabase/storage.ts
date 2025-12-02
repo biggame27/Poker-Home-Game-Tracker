@@ -689,7 +689,7 @@ export async function removeGameSession(
 ): Promise<boolean> {
   const supabase = createClient()
 
-  // Only allow removing from open games
+  // Only allow removing from open or in-progress games
   const { data: gameStatusRow, error: statusError } = await supabase
     .from('games')
     .select('status')
@@ -701,8 +701,8 @@ export async function removeGameSession(
     return false
   }
 
-  if (gameStatusRow.status !== 'open') {
-    console.warn('Attempted to leave a non-open game; aborting.')
+  if (!['open', 'in-progress'].includes(gameStatusRow.status)) {
+    console.warn('Attempted to leave a non-open/non-in-progress game; aborting.')
     return false
   }
 
