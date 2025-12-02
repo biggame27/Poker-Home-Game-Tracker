@@ -598,7 +598,7 @@ export async function createGame(
 
 export async function updateGameSession(
   gameId: string,
-  userId: string,
+  userId: string | null,
   playerName: string,
   buyIn: number,
   endAmount: number
@@ -623,12 +623,29 @@ export async function updateGameSession(
   }
   
   // Check if session exists
-  const { data: existing } = await supabase
-    .from('game_sessions')
-    .select('id')
-    .eq('game_id', gameId)
-    .eq('user_id', userId)
-    .single()
+  let existing: { id: string } | null = null
+
+  if (userId) {
+    const { data } = await supabase
+      .from('game_sessions')
+      .select('id')
+      .eq('game_id', gameId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    existing = data as any
+  } else {
+    // For sessions without a userId (manual entries), match by game + player name and null user_id
+    const { data } = await supabase
+      .from('game_sessions')
+      .select('id')
+      .eq('game_id', gameId)
+      .eq('player_name', playerName)
+      .is('user_id', null)
+      .maybeSingle()
+
+    existing = data as any
+  }
   
   if (existing) {
     // Update existing session
