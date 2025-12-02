@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { JoinGameForm } from '@/components/JoinGameForm'
 import { Leaderboard } from '@/components/Leaderboard'
 import { getGameById, getGroupById, removeGameSession, updateGameStatus, updateGameSession } from '@/lib/supabase/storage'
@@ -36,11 +37,19 @@ function GameDetailContent() {
   const [participantUpdating, setParticipantUpdating] = useState(false)
   const [payoutCompletedAt, setPayoutCompletedAt] = useState<string>('')
   const [payoutMethod, setPayoutMethod] = useState<string>('')
+  const [payoutHandle, setPayoutHandle] = useState<string>('')
   const [sessionConfirmed, setSessionConfirmed] = useState(false)
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [confirmMethod, setConfirmMethod] = useState<string>('')
   const [confirmPayoutTime, setConfirmPayoutTime] = useState<string>('')
-  
+  const [confirmHandle, setConfirmHandle] = useState<string>('')
+
+  const getNowLocal = () => {
+    const now = new Date()
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+    return now.toISOString().slice(0, 16)
+  }
+
   // Get the referrer from query params
   const from = searchParams.get('from') || null
   const groupId = searchParams.get('groupId') || null
@@ -103,22 +112,29 @@ function GameDetailContent() {
         const parsed = JSON.parse(stored)
         setPayoutCompletedAt(parsed.completedAt || '')
         setPayoutMethod(parsed.method || '')
+        setPayoutHandle(parsed.handle || '')
         setSessionConfirmed(Boolean(parsed.confirmed))
         setConfirmMethod(parsed.method || '')
         setConfirmPayoutTime(parsed.completedAt || '')
+        setConfirmHandle(parsed.handle || '')
       } catch {
         setPayoutCompletedAt(stored)
         setPayoutMethod('')
+        setPayoutHandle('')
         setSessionConfirmed(false)
         setConfirmMethod('')
         setConfirmPayoutTime('')
+        setConfirmHandle('')
       }
     } else {
-      setPayoutCompletedAt('')
+      const nowLocal = getNowLocal()
+      setPayoutCompletedAt(nowLocal)
       setPayoutMethod('')
+      setPayoutHandle('')
       setSessionConfirmed(false)
       setConfirmMethod('')
-      setConfirmPayoutTime('')
+      setConfirmPayoutTime(nowLocal)
+      setConfirmHandle('')
     }
   }, [game?.id, user?.id])
 
@@ -148,12 +164,13 @@ function GameDetailContent() {
     setConfirmDialogOpen(false)
   }, [game?.status, game?.id, user?.id])
 
-  const savePayoutMeta = (next: { completedAt?: string; method?: string; confirmed?: boolean }) => {
+  const savePayoutMeta = (next: { completedAt?: string; method?: string; handle?: string; confirmed?: boolean }) => {
     if (!game || !user?.id) return
     const key = `payout-${game.id}-${user.id}`
     const payload = {
       completedAt: next.completedAt ?? payoutCompletedAt,
       method: next.method ?? payoutMethod,
+      handle: next.handle ?? payoutHandle,
       confirmed: next.confirmed ?? sessionConfirmed,
     }
     localStorage.setItem(key, JSON.stringify(payload))
@@ -162,16 +179,29 @@ function GameDetailContent() {
   const handleConfirmSession = () => {
     if (!game || !user?.id) return
     setConfirmMethod(payoutMethod)
-    setConfirmPayoutTime(payoutCompletedAt)
+    setConfirmHandle(payoutHandle)
+    setConfirmPayoutTime(payoutCompletedAt || getNowLocal())
     setConfirmDialogOpen(true)
   }
 
   const handleConfirmDialogSave = () => {
+    if (userLostMoney) {
+      if (!confirmMethod) {
+        alert('Please select a payment type.')
+        return
+      }
+      if (!confirmHandle.trim()) {
+        alert('Please enter your payment username/handle.')
+        return
+      }
+    }
     const nextMethod = confirmMethod.trim()
+    const nextHandle = confirmHandle.trim()
     setPayoutMethod(nextMethod)
+    setPayoutHandle(nextHandle)
     setPayoutCompletedAt(confirmPayoutTime)
     setSessionConfirmed(true)
-    savePayoutMeta({ confirmed: true, method: nextMethod, completedAt: confirmPayoutTime })
+    savePayoutMeta({ confirmed: true, method: nextMethod, completedAt: confirmPayoutTime, handle: nextHandle })
     setConfirmDialogOpen(false)
   }
 
@@ -683,11 +713,29 @@ function GameDetailContent() {
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="confirmMethod">How did you pay out?</Label>
-                    <Input
-                      id="confirmMethod"
-                      placeholder="Venmo @username, Zelle, Cash App, cash..."
+                    <Select
                       value={confirmMethod}
-                      onChange={(e) => setConfirmMethod(e.target.value)}
+                      onValueChange={(val) => setConfirmMethod(val)}
+                    >
+                      <SelectTrigger id="confirmMethod" className="w-full">
+                        <SelectValue placeholder="Choose a method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Zelle">Zelle</SelectItem>
+                        <SelectItem value="Cash App">Cash App</SelectItem>
+                        <SelectItem value="Venmo">Venmo</SelectItem>
+                        <SelectItem value="Cash">Cash</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmHandle">Username / handle</Label>
+                    <Input
+                      id="confirmHandle"
+                      placeholder="@johndoe"
+                      value={confirmHandle}
+                      onChange={(e) => setConfirmHandle(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
