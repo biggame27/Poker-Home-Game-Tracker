@@ -43,6 +43,10 @@ function GameDetailContent() {
   const [confirmMethod, setConfirmMethod] = useState<string>('')
   const [confirmPayoutTime, setConfirmPayoutTime] = useState<string>('')
   const [confirmHandle, setConfirmHandle] = useState<string>('')
+  const [disputeDialogOpen, setDisputeDialogOpen] = useState(false)
+  const [disputeBuyIn, setDisputeBuyIn] = useState<string>('')
+  const [disputePayout, setDisputePayout] = useState<string>('')
+  const [disputeNoticeOpen, setDisputeNoticeOpen] = useState(false)
 
   const getNowLocal = () => {
     const now = new Date()
@@ -185,15 +189,13 @@ function GameDetailContent() {
   }
 
   const handleConfirmDialogSave = () => {
-    if (userLostMoney) {
-      if (!confirmMethod) {
-        alert('Please select a payment type.')
-        return
-      }
-      if (!confirmHandle.trim()) {
-        alert('Please enter your payment username/handle.')
-        return
-      }
+    if (!confirmMethod) {
+      alert('Please select a payment type.')
+      return
+    }
+    if (!confirmHandle.trim()) {
+      alert('Please enter your payment username/handle.')
+      return
     }
     const nextMethod = confirmMethod.trim()
     const nextHandle = confirmHandle.trim()
@@ -203,6 +205,24 @@ function GameDetailContent() {
     setSessionConfirmed(true)
     savePayoutMeta({ confirmed: true, method: nextMethod, completedAt: confirmPayoutTime, handle: nextHandle })
     setConfirmDialogOpen(false)
+  }
+
+  const handleOpenDispute = () => {
+    setDisputeBuyIn(userSession ? userSession.buyIn.toString() : '')
+    setDisputePayout(userSession ? userSession.endAmount.toString() : '')
+    setDisputeDialogOpen(true)
+  }
+
+  const handleSubmitDispute = () => {
+    const buyVal = disputeBuyIn.trim()
+    const payoutVal = disputePayout.trim()
+    if (!buyVal || !payoutVal) {
+      alert('Please enter both buy-in and payout amounts.')
+      return
+    }
+    setSessionConfirmed(true)
+    setDisputeDialogOpen(false)
+    setDisputeNoticeOpen(true)
   }
 
   const copyGameLink = () => {
@@ -525,7 +545,7 @@ function GameDetailContent() {
                           min="0"
                           className="w-32"
                           value={session.buyIn}
-                          disabled={game.status === 'completed'}
+                          disabled={game.status === 'completed' || game.status === 'open'}
                           onChange={(e) => {
                             const value = e.target.value
                             setEditingSessions(prev => {
@@ -544,7 +564,7 @@ function GameDetailContent() {
                           min="0"
                           className="w-32"
                           value={session.endAmount}
-                          disabled={game.status === 'completed'}
+                          disabled={game.status === 'completed' || game.status === 'open'}
                           onChange={(e) => {
                             const value = e.target.value
                             setEditingSessions(prev => {
@@ -569,7 +589,7 @@ function GameDetailContent() {
                         <Button
                           size="sm"
                           className="mt-1"
-                          disabled={savingIndex === index || game.status === 'completed'}
+                          disabled={savingIndex === index || game.status === 'completed' || game.status === 'open'}
                           onClick={async () => {
                             if (!user?.id) return
 
@@ -650,17 +670,26 @@ function GameDetailContent() {
               </div>
 
               <p className="text-sm text-muted-foreground">
-                Use confirm to lock your session. If you lost money, you can add payout method and time during confirmation.
+                Use confirm to lock your session. Add payout details so others know how to pay you (or how you paid out).
               </p>
 
               <div className="flex items-center gap-3">
-                <Button
-                  type="button"
-                  variant="default"
-                  onClick={handleConfirmSession}
-                >
-                  Confirm Session
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="default"
+                    onClick={handleConfirmSession}
+                  >
+                    Confirm Session
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleOpenDispute}
+                  >
+                    Dispute Session
+                  </Button>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Confirmation and payout details are visible to you and the owner on this device.
                 </p>
@@ -690,7 +719,7 @@ function GameDetailContent() {
             <CardHeader>
               <CardTitle>Confirm Your Session</CardTitle>
               <CardDescription>
-                Review and confirm your session. If you paid out, add how and when you completed it.
+                Review and confirm your session. Add how you want to be paid (or how you paid out).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -709,46 +738,42 @@ function GameDetailContent() {
                 </div>
               </div>
 
-              {userLostMoney && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmMethod">How did you pay out?</Label>
-                    <Select
-                      value={confirmMethod}
-                      onValueChange={(val) => setConfirmMethod(val)}
-                    >
-                      <SelectTrigger id="confirmMethod" className="w-full">
-                        <SelectValue placeholder="Choose a method" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Zelle">Zelle</SelectItem>
-                        <SelectItem value="Cash App">Cash App</SelectItem>
-                        <SelectItem value="Venmo">Venmo</SelectItem>
-                        <SelectItem value="Cash">Cash</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmHandle">Username / handle</Label>
-                    <Input
-                      id="confirmHandle"
-                      placeholder="@johndoe"
-                      value={confirmHandle}
-                      onChange={(e) => setConfirmHandle(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPayoutTime">Payout completed at</Label>
-                    <Input
-                      id="confirmPayoutTime"
-                      type="datetime-local"
-                      value={confirmPayoutTime}
-                      onChange={(e) => setConfirmPayoutTime(e.target.value)}
-                    />
-                  </div>
-                </>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="confirmMethod">Payment method</Label>
+                <Select
+                  value={confirmMethod}
+                  onValueChange={(val) => setConfirmMethod(val)}
+                >
+                  <SelectTrigger id="confirmMethod" className="w-full">
+                    <SelectValue placeholder="Choose a method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Zelle">Zelle</SelectItem>
+                    <SelectItem value="Cash App">Cash App</SelectItem>
+                    <SelectItem value="Venmo">Venmo</SelectItem>
+                    <SelectItem value="Cash">Cash</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmHandle">Username / handle</Label>
+                <Input
+                  id="confirmHandle"
+                  placeholder="@johndoe"
+                  value={confirmHandle}
+                  onChange={(e) => setConfirmHandle(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPayoutTime">Payout completed at</Label>
+                <Input
+                  id="confirmPayoutTime"
+                  type="datetime-local"
+                  value={confirmPayoutTime}
+                  onChange={(e) => setConfirmPayoutTime(e.target.value)}
+                />
+              </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <Button variant="outline" type="button" onClick={() => setConfirmDialogOpen(false)}>
@@ -758,6 +783,71 @@ function GameDetailContent() {
                   Confirm
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {disputeDialogOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
+          <Card className="w-full max-w-lg">
+            <CardHeader>
+              <CardTitle>Dispute Session</CardTitle>
+              <CardDescription>
+                Suggest the buy-in and payout amounts you believe are correct.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="disputeBuyIn">Buy-In</Label>
+                  <Input
+                    id="disputeBuyIn"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={disputeBuyIn}
+                    onChange={(e) => setDisputeBuyIn(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="disputePayout">Payout</Label>
+                  <Input
+                    id="disputePayout"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={disputePayout}
+                    onChange={(e) => setDisputePayout(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button variant="outline" type="button" onClick={() => setDisputeDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={handleSubmitDispute}>
+                  Submit Dispute
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {disputeNoticeOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle>Dispute Submitted</CardTitle>
+              <CardDescription>
+                When the host verifies this dispute, you can confirm the correct amount.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex items-center justify-end gap-2">
+              <Button variant="outline" onClick={() => setDisputeNoticeOpen(false)}>
+                Close
+              </Button>
             </CardContent>
           </Card>
         </div>
