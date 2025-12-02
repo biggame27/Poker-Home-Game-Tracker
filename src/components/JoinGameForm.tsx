@@ -6,9 +6,11 @@ import type { Game } from '@/types'
 
 interface JoinGameFormProps {
   game: Game
+  onAddMember?: () => void
+  canAddMember?: boolean
 }
 
-export function JoinGameForm({ game }: JoinGameFormProps) {
+export function JoinGameForm({ game, onAddMember, canAddMember }: JoinGameFormProps) {
   const { user } = useUser()
 
   const renderParticipants = () => {
@@ -56,8 +58,17 @@ export function JoinGameForm({ game }: JoinGameFormProps) {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Participants</CardTitle>
+        {canAddMember && onAddMember && (
+          <button
+            type="button"
+            className="text-sm font-medium text-primary hover:underline"
+            onClick={onAddMember}
+          >
+            Add member
+          </button>
+        )}
       </CardHeader>
       <CardContent>
         {renderParticipants()}
