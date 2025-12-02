@@ -22,9 +22,12 @@ export function JoinGameForm({ game, onAddMember, canAddMember }: JoinGameFormPr
       )
     }
 
-    return (
+    const memberSessions = game.sessions.filter(s => s.userId)
+    const guestSessions = game.sessions.filter(s => !s.userId)
+
+    const renderList = (sessions: typeof game.sessions) => (
       <div className="space-y-2">
-        {game.sessions.map((session, index) => {
+        {sessions.map((session, index) => {
           const isCurrentUser = session.userId && session.userId === user?.id
           const profit = session.profit ?? (session.endAmount - session.buyIn)
 
@@ -41,6 +44,11 @@ export function JoinGameForm({ game, onAddMember, canAddMember }: JoinGameFormPr
                       You
                     </span>
                   )}
+                  {!session.userId && (
+                    <span className="text-[10px] uppercase tracking-wide rounded-full bg-muted text-muted-foreground px-2 py-0.5">
+                      Guest
+                    </span>
+                  )}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Buy-in: ${session.buyIn.toFixed(2)} | Cash out: ${session.endAmount.toFixed(2)}
@@ -52,6 +60,23 @@ export function JoinGameForm({ game, onAddMember, canAddMember }: JoinGameFormPr
             </div>
           )
         })}
+      </div>
+    )
+
+    return (
+      <div className="space-y-4">
+        {memberSessions.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Members</p>
+            {renderList(memberSessions)}
+          </div>
+        )}
+        {guestSessions.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Guests</p>
+            {renderList(guestSessions)}
+          </div>
+        )}
       </div>
     )
   }

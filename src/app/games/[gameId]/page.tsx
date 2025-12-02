@@ -51,6 +51,7 @@ function GameDetailContent() {
   const [addMemberMode, setAddMemberMode] = useState<'group' | 'guest'>('group')
   const [selectedGroupMemberId, setSelectedGroupMemberId] = useState<string>('')
   const [memberSearch, setMemberSearch] = useState('')
+  const [memberListOpen, setMemberListOpen] = useState(false)
   const [memberName, setMemberName] = useState('')
   const [memberSaving, setMemberSaving] = useState(false)
 
@@ -241,10 +242,12 @@ function GameDetailContent() {
       setSelectedGroupMemberId('')
       setMemberSearch('')
       setMemberName('')
+      setMemberListOpen(false)
     } else {
       setSelectedGroupMemberId(eligibleMembers[0].userId)
       setMemberSearch('')
       setMemberName(eligibleMembers[0].userName || '')
+      setMemberListOpen(true)
     }
     setAddMemberOpen(true)
   }
@@ -966,48 +969,59 @@ function GameDetailContent() {
                       id="memberSearch"
                       placeholder="Search by name"
                       value={memberSearch}
-                      onChange={(e) => setMemberSearch(e.target.value)}
+                      onChange={(e) => {
+                        setMemberSearch(e.target.value)
+                        setMemberListOpen(true)
+                      }}
+                      onFocus={() => setMemberListOpen(true)}
+                      onBlur={() => setMemberListOpen(false)}
                     />
                   </div>
-                  <div className="space-y-2 max-h-48 overflow-y-auto rounded-md border p-2">
-                    {(() => {
-                      const filtered = (group?.members || []).filter(m =>
-                        (m.userName || 'Member')
-                          .toLowerCase()
-                          .includes((memberSearch || '').toLowerCase())
-                      )
-
-                      if (filtered.length === 0) {
-                        return <p className="text-xs text-muted-foreground px-1">No members match your search.</p>
-                      }
-
-                      return filtered.map(m => {
-                        const alreadyInGame = game.sessions.some(s => s.userId === m.userId)
-                        return (
-                          <button
-                            type="button"
-                            key={m.userId}
-                            className={`w-full text-left px-3 py-2 rounded-md border flex items-center justify-between ${
-                              selectedGroupMemberId === m.userId ? 'border-primary text-primary' : 'border-muted'
-                            } ${alreadyInGame ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            onClick={() => {
-                              if (alreadyInGame) return
-                              setSelectedGroupMemberId(m.userId)
-                              setMemberName(m.userName || 'Member')
-                            }}
-                            disabled={alreadyInGame}
-                          >
-                            <span>{m.userName || 'Member'}</span>
-                            {alreadyInGame && (
-                              <span className="text-[10px] uppercase tracking-wide rounded-full bg-muted text-muted-foreground px-2 py-0.5">
-                                Added
-                              </span>
-                            )}
-                          </button>
+                  {memberListOpen && (
+                    <div className="space-y-1 max-h-48 overflow-y-auto rounded-md border p-2">
+                      {(() => {
+                        const filtered = (group?.members || []).filter(m =>
+                          (m.userName || 'Member')
+                            .toLowerCase()
+                            .includes((memberSearch || '').toLowerCase())
                         )
-                      })
-                    })()}
-                  </div>
+
+                        if (filtered.length === 0) {
+                          return <p className="text-xs text-muted-foreground px-1">No members match your search.</p>
+                        }
+
+                        return filtered.map(m => {
+                          const alreadyInGame = game.sessions.some(s => s.userId === m.userId)
+                          return (
+                            <button
+                              type="button"
+                              key={m.userId}
+                              className={`w-full text-left px-2 py-1.5 rounded-md border flex items-center justify-between text-sm ${
+                                selectedGroupMemberId === m.userId ? 'border-primary text-primary' : 'border-muted'
+                              } ${alreadyInGame ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                if (alreadyInGame) return
+                                setSelectedGroupMemberId(m.userId)
+                                const chosen = m.userName || 'Member'
+                                setMemberName(chosen)
+                                setMemberSearch(chosen)
+                                setMemberListOpen(false)
+                              }}
+                              disabled={alreadyInGame}
+                            >
+                              <span className="truncate">{m.userName || 'Member'}</span>
+                              {alreadyInGame && (
+                                <span className="text-[10px] uppercase tracking-wide rounded-full bg-muted text-muted-foreground px-2 py-0.5">
+                                  Added
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })
+                      })()}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">

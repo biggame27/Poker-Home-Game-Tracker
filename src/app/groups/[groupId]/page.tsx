@@ -162,6 +162,14 @@ export default function GroupDetailPage() {
 
   const isOwner = group.createdBy === user?.id
   const isMember = group.members.some(m => m.userId === user?.id)
+  const guestParticipants = Array.from(
+    new Map(
+      games
+        .flatMap(g => g.sessions.filter(s => (s as any).role === 'guest'))
+        .map(s => [s.playerName, { name: s.playerName }])
+    ).values()
+  )
+  const totalMemberDisplay = group.members.length + guestParticipants.length
 
   return (
     <div className="min-h-screen bg-background">
@@ -264,7 +272,7 @@ export default function GroupDetailPage() {
                   <Users className="h-4 w-4" />
                   <span className="text-sm">Members</span>
                 </div>
-                <p className="text-2xl font-bold">{group.members.length}</p>
+                <p className="text-2xl font-bold">{totalMemberDisplay}</p>
               </CardContent>
             </Card>
             <Card>
@@ -334,6 +342,24 @@ export default function GroupDetailPage() {
                   )}
                 </div>
               ))}
+              {guestParticipants.length > 0 && (
+                <>
+                  {guestParticipants.map((guest) => (
+                    <div
+                      key={`guest-${guest.name}`}
+                      className="flex items-center justify-between p-3 border rounded-lg"
+                    >
+                      <div>
+                        <p className="font-medium">{guest.name}</p>
+                        <p className="text-sm text-muted-foreground">Added as guest (from games)</p>
+                      </div>
+                      <span className="text-xs px-2 py-1 bg-muted text-muted-foreground rounded-full">
+                        Guest
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </CardContent>
         </Card>
