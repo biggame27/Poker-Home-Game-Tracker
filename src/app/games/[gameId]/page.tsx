@@ -164,7 +164,7 @@ function GameDetailContent() {
     setConfirmDialogOpen(false)
   }, [game?.status, game?.id, user?.id])
 
-  const savePayoutMeta = (next: { completedAt?: string; method?: string; confirmed?: boolean }) => {
+  const savePayoutMeta = (next: { completedAt?: string; method?: string; handle?: string; confirmed?: boolean }) => {
     if (!game || !user?.id) return
     const key = `payout-${game.id}-${user.id}`
     const payload = {
