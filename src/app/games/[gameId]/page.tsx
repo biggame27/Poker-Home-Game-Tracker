@@ -11,7 +11,7 @@ import { JoinGameForm } from '@/components/JoinGameForm'
 import { Leaderboard } from '@/components/Leaderboard'
 import { getGameById, getGroupById, updateGameStatus, updateGameSession } from '@/lib/supabase/storage'
 import type { Game, Group } from '@/types'
-import { Users, Calendar, ArrowLeft, Copy, Check, Lock, Unlock } from 'lucide-react'
+import { Users, ArrowLeft, Copy, Check, Lock, Unlock, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
@@ -33,6 +33,7 @@ function GameDetailContent() {
     userId?: string
   }[]>([])
   const [savingIndex, setSavingIndex] = useState<number | null>(null)
+  const [joinLoading, setJoinLoading] = useState(false)
   
   // Get the referrer from query params
   const from = searchParams.get('from') || null
@@ -149,10 +150,36 @@ function GameDetailContent() {
     ? group.createdBy === user?.id || group.members.some(m => m.userId === user?.id && m.role === 'owner')
     : false
   const canAdminEdit = isHost || isGroupOwner
+  const isAlreadyJoined = game.sessions.some(s => s.userId === user?.id)
+  const isClosed = game.status === 'completed'
   const totalPlayers = game.sessions.length
   const totalBuyIns = game.sessions.reduce((sum, s) => sum + (s.buyIn || 0), 0)
   const totalEndAmounts = game.sessions.reduce((sum, s) => sum + (s.endAmount || 0), 0)
   const totalProfit = totalEndAmounts - totalBuyIns
+
+  const handleQuickJoin = async () => {
+    if (!user?.id) {
+      alert('You must be logged in to join this game.')
+      return
+    }
+    if (isAlreadyJoined || isClosed) return
+
+    setJoinLoading(true)
+    try {
+      const playerName = user.fullName || user.emailAddresses?.[0]?.emailAddress || 'Player'
+      const success = await updateGameSession(game.id, user.id, playerName, 0, 0)
+      if (!success) {
+        alert('Failed to join game. Please try again.')
+        return
+      }
+      await refreshGame()
+    } catch (error) {
+      console.error('Error joining game:', error)
+      alert('Failed to join game. Please try again.')
+    } finally {
+      setJoinLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -181,7 +208,7 @@ function GameDetailContent() {
             </Button>
           </div>
           
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between gap-4">
             <div className="space-y-2">
               <h1 className="text-4xl font-bold tracking-tight">
                 Game - {format(new Date(game.date), 'MMMM dd, yyyy')}
@@ -220,24 +247,43 @@ function GameDetailContent() {
                 <p className="text-muted-foreground">{game.notes}</p>
               )}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={copyGameLink}
-              className="gap-2"
-            >
-              {copied ? (
-                <>
-                  <Check className="h-4 w-4" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" />
-                  Copy Link
-                </>
+            <div className="flex items-center gap-2">
+              {user && (
+                <Button
+                  size="sm"
+                  className="gap-2"
+                  onClick={handleQuickJoin}
+                  disabled={joinLoading || isAlreadyJoined || isClosed}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  {isClosed
+                    ? 'Game Closed'
+                    : isAlreadyJoined
+                      ? 'Joined'
+                      : joinLoading
+                        ? 'Joining...'
+                        : 'Join Game'}
+                </Button>
               )}
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={copyGameLink}
+                className="gap-2"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    Copy Link
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
 
           {/* Game Stats */}
@@ -410,7 +456,11 @@ function GameDetailContent() {
 
         {/* Join / Personal Session Form */}
         {user && (
-          <JoinGameForm game={game} onSuccess={refreshGame} />
+          <div id="join-game-section">
+            <JoinGameForm 
+              game={game}
+            />
+          </div>
         )}
 
         {/* Players List / Leaderboard */}
