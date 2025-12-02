@@ -5,9 +5,11 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { JoinGameForm } from '@/components/JoinGameForm'
 import { Leaderboard } from '@/components/Leaderboard'
-import { getGameById, getGroupById, updateGameStatus } from '@/lib/supabase/storage'
+import { getGameById, getGroupById, updateGameStatus, updateGameSession } from '@/lib/supabase/storage'
 import type { Game, Group } from '@/types'
 import { Users, Calendar, ArrowLeft, Copy, Check, Lock, Unlock } from 'lucide-react'
 import Link from 'next/link'
@@ -24,6 +26,13 @@ function GameDetailContent() {
   const [group, setGroup] = useState<Group | null>(null)
   const [copied, setCopied] = useState(false)
   const [statusUpdating, setStatusUpdating] = useState(false)
+  const [editingSessions, setEditingSessions] = useState<{
+    playerName: string
+    buyIn: string
+    endAmount: string
+    userId?: string
+  }[]>([])
+  const [savingIndex, setSavingIndex] = useState<number | null>(null)
   
   // Get the referrer from query params
   const from = searchParams.get('from') || null
@@ -43,6 +52,15 @@ function GameDetailContent() {
         setGame(foundGame)
         const foundGroup = await getGroupById(foundGame.groupId)
         setGroup(foundGroup)
+
+        setEditingSessions(
+          (foundGame.sessions || []).map(s => ({
+            playerName: s.playerName,
+            buyIn: s.buyIn.toString(),
+            endAmount: s.endAmount.toString(),
+            userId: s.userId,
+          }))
+        )
       }
     } catch (error) {
       console.error('Error loading game data:', error)
@@ -55,6 +73,14 @@ function GameDetailContent() {
       const foundGame = await getGameById(gameId)
       if (foundGame) {
         setGame(foundGame)
+        setEditingSessions(
+          (foundGame.sessions || []).map(s => ({
+            playerName: s.playerName,
+            buyIn: s.buyIn.toString(),
+            endAmount: s.endAmount.toString(),
+            userId: s.userId,
+          }))
+        )
       }
     } catch (error) {
       console.error('Error refreshing game:', error)
@@ -122,6 +148,7 @@ function GameDetailContent() {
   const isGroupOwner = group
     ? group.createdBy === user?.id || group.members.some(m => m.userId === user?.id && m.role === 'owner')
     : false
+  const canAdminEdit = isHost || isGroupOwner
   const totalPlayers = game.sessions.length
   const totalBuyIns = game.sessions.reduce((sum, s) => sum + (s.buyIn || 0), 0)
   const totalEndAmounts = game.sessions.reduce((sum, s) => sum + (s.endAmount || 0), 0)
@@ -255,7 +282,133 @@ function GameDetailContent() {
           </div>
         </div>
 
-        {/* Join Game Form */}
+        {/* Admin Session Editor */}
+        {canAdminEdit && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Manage Sessions</CardTitle>
+              <CardDescription>
+                Edit buy-ins and cash outs for all participants. Changes apply immediately.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {editingSessions.map((session, index) => {
+                  const original = game.sessions[index]
+                  const profit =
+                    (parseFloat(session.endAmount || '0') || 0) -
+                    (parseFloat(session.buyIn || '0') || 0)
+
+                  return (
+                    <div
+                      key={`${session.playerName}-${index}`}
+                      className="flex flex-col md:flex-row md:items-end gap-3 border rounded-md p-3"
+                    >
+                      <div className="flex-1 space-y-1">
+                        <Label className="text-xs text-muted-foreground">Player</Label>
+                        <p className="text-sm font-medium">
+                          {original?.playerName || session.playerName || 'Player'}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Buy-In ($)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="w-32"
+                          value={session.buyIn}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setEditingSessions(prev => {
+                              const next = [...prev]
+                              next[index] = { ...next[index], buyIn: value }
+                              return next
+                            })
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">End Amount ($)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="w-32"
+                          value={session.endAmount}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setEditingSessions(prev => {
+                              const next = [...prev]
+                              next[index] = { ...next[index], endAmount: value }
+                              return next
+                            })
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1 md:ml-auto">
+                        <Label className="text-xs text-muted-foreground">Profit/Loss</Label>
+                        <p
+                          className={`text-sm font-semibold ${
+                            profit >= 0 ? 'text-green-600' : 'text-red-600'
+                          }`}
+                        >
+                          {profit >= 0 ? '+' : '-'}${Math.abs(profit).toFixed(2)}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <Button
+                          size="sm"
+                          className="mt-1"
+                          disabled={savingIndex === index || game.status === 'completed'}
+                          onClick={async () => {
+                            if (!user?.id) return
+
+                            const buyInAmount = parseFloat(session.buyIn) || 0
+                            const endAmount = parseFloat(session.endAmount) || 0
+
+                            setSavingIndex(index)
+                            try {
+                                const success = await updateGameSession(
+                                  game.id,
+                                  session.userId || null,
+                                  original?.playerName || session.playerName || 'Player',
+                                  buyInAmount,
+                                  endAmount
+                                )
+
+                              if (!success) {
+                                alert('Failed to update session. Make sure the game is open.')
+                                return
+                              }
+
+                              await refreshGame()
+                            } catch (error) {
+                              console.error('Error updating session:', error)
+                              alert('Failed to update session. Please try again.')
+                            } finally {
+                              setSavingIndex(null)
+                            }
+                          }}
+                        >
+                          {savingIndex === index ? 'Saving...' : 'Save'}
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {editingSessions.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No sessions to edit yet. Once players are added, you can manage them here.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Join / Personal Session Form */}
         {user && (
           <JoinGameForm game={game} onSuccess={refreshGame} />
         )}
