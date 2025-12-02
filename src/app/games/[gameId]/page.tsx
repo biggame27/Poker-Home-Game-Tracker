@@ -301,7 +301,7 @@ function GameDetailContent() {
       alert('You must be logged in to join this game.')
       return
     }
-    if (isAlreadyJoined || isClosed || game.status !== 'open') return
+    if (isAlreadyJoined || isClosed) return
 
     setParticipantUpdating(true)
     try {
@@ -325,7 +325,7 @@ function GameDetailContent() {
       alert('You must be logged in to leave this game.')
       return
     }
-    if (!isAlreadyJoined || game.status !== 'open') return
+    if (!isAlreadyJoined || isClosed) return
 
     setParticipantUpdating(true)
     try {
@@ -425,25 +425,18 @@ function GameDetailContent() {
                   size="sm"
                   className="gap-2"
                   onClick={isAlreadyJoined ? handleQuickLeave : handleQuickJoin}
-                  disabled={
-                    participantUpdating ||
-                    isClosed ||
-                    game.status === 'in-progress' ||
-                    game.status === 'completed'
-                  }
+                  disabled={participantUpdating || isClosed}
                 >
                   {isAlreadyJoined ? <LogOut className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
                   {isClosed
                     ? 'Game Closed'
-                    : game.status === 'in-progress'
-                      ? 'In Progress'
-                      : isAlreadyJoined
-                        ? participantUpdating
-                          ? 'Leaving...'
-                          : 'Leave Game'
-                        : participantUpdating
-                          ? 'Joining...'
-                          : 'Join Game'}
+                    : isAlreadyJoined
+                      ? participantUpdating
+                        ? 'Leaving...'
+                        : 'Leave Game'
+                      : participantUpdating
+                        ? 'Joining...'
+                        : 'Join Game'}
                 </Button>
               )}
               <Button
