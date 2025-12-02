@@ -9,9 +9,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { JoinGameForm } from '@/components/JoinGameForm'
 import { Leaderboard } from '@/components/Leaderboard'
-import { getGameById, getGroupById, updateGameStatus, updateGameSession } from '@/lib/supabase/storage'
+import { getGameById, getGroupById, removeGameSession, updateGameStatus, updateGameSession } from '@/lib/supabase/storage'
 import type { Game, Group } from '@/types'
-import { Users, ArrowLeft, Copy, Check, Lock, Unlock, UserPlus } from 'lucide-react'
+import { Users, ArrowLeft, Copy, Check, Lock, Unlock, UserPlus, LogOut } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
@@ -33,7 +33,13 @@ function GameDetailContent() {
     userId?: string
   }[]>([])
   const [savingIndex, setSavingIndex] = useState<number | null>(null)
-  const [joinLoading, setJoinLoading] = useState(false)
+  const [participantUpdating, setParticipantUpdating] = useState(false)
+  const [payoutCompletedAt, setPayoutCompletedAt] = useState<string>('')
+  const [payoutMethod, setPayoutMethod] = useState<string>('')
+  const [sessionConfirmed, setSessionConfirmed] = useState(false)
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+  const [confirmMethod, setConfirmMethod] = useState<string>('')
+  const [confirmPayoutTime, setConfirmPayoutTime] = useState<string>('')
   
   // Get the referrer from query params
   const from = searchParams.get('from') || null
@@ -88,6 +94,87 @@ function GameDetailContent() {
     }
   }
 
+  useEffect(() => {
+    if (!game || !user?.id) return
+    const key = `payout-${game.id}-${user.id}`
+    const stored = typeof window !== 'undefined' ? localStorage.getItem(key) : null
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored)
+        setPayoutCompletedAt(parsed.completedAt || '')
+        setPayoutMethod(parsed.method || '')
+        setSessionConfirmed(Boolean(parsed.confirmed))
+        setConfirmMethod(parsed.method || '')
+        setConfirmPayoutTime(parsed.completedAt || '')
+      } catch {
+        setPayoutCompletedAt(stored)
+        setPayoutMethod('')
+        setSessionConfirmed(false)
+        setConfirmMethod('')
+        setConfirmPayoutTime('')
+      }
+    } else {
+      setPayoutCompletedAt('')
+      setPayoutMethod('')
+      setSessionConfirmed(false)
+      setConfirmMethod('')
+      setConfirmPayoutTime('')
+    }
+  }, [game?.id, user?.id])
+
+  // If the game is reopened (not completed), clear confirmation so it reappears next time it closes
+  useEffect(() => {
+    if (!game || !user?.id || typeof window === 'undefined') return
+    if (game.status === 'completed') return
+
+    const key = `payout-${game.id}-${user.id}`
+    const stored = localStorage.getItem(key)
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored)
+        localStorage.setItem(
+          key,
+          JSON.stringify({
+            ...parsed,
+            confirmed: false,
+          })
+        )
+      } catch {
+        localStorage.setItem(key, JSON.stringify({ completedAt: '', method: '', confirmed: false }))
+      }
+    }
+
+    setSessionConfirmed(false)
+    setConfirmDialogOpen(false)
+  }, [game?.status, game?.id, user?.id])
+
+  const savePayoutMeta = (next: { completedAt?: string; method?: string; confirmed?: boolean }) => {
+    if (!game || !user?.id) return
+    const key = `payout-${game.id}-${user.id}`
+    const payload = {
+      completedAt: next.completedAt ?? payoutCompletedAt,
+      method: next.method ?? payoutMethod,
+      confirmed: next.confirmed ?? sessionConfirmed,
+    }
+    localStorage.setItem(key, JSON.stringify(payload))
+  }
+
+  const handleConfirmSession = () => {
+    if (!game || !user?.id) return
+    setConfirmMethod(payoutMethod)
+    setConfirmPayoutTime(payoutCompletedAt)
+    setConfirmDialogOpen(true)
+  }
+
+  const handleConfirmDialogSave = () => {
+    const nextMethod = confirmMethod.trim()
+    setPayoutMethod(nextMethod)
+    setPayoutCompletedAt(confirmPayoutTime)
+    setSessionConfirmed(true)
+    savePayoutMeta({ confirmed: true, method: nextMethod, completedAt: confirmPayoutTime })
+    setConfirmDialogOpen(false)
+  }
+
   const copyGameLink = () => {
     if (gameId) {
       const url = `${window.location.origin}/games/${gameId}`
@@ -97,7 +184,7 @@ function GameDetailContent() {
     }
   }
 
-  const changeGameStatus = async (status: 'open' | 'completed') => {
+  const changeGameStatus = async (status: 'open' | 'completed' | 'in-progress') => {
     if (!gameId || !game || !user?.id) return
     setStatusUpdating(true)
     try {
@@ -151,7 +238,9 @@ function GameDetailContent() {
     : false
   const canAdminEdit = isHost || isGroupOwner
   const isAlreadyJoined = game.sessions.some(s => s.userId === user?.id)
+  const userSession = game.sessions.find(s => s.userId === user?.id)
   const isClosed = game.status === 'completed'
+  const userLostMoney = userSession ? userSession.endAmount < userSession.buyIn : false
   const totalPlayers = game.sessions.length
   const totalBuyIns = game.sessions.reduce((sum, s) => sum + (s.buyIn || 0), 0)
   const totalEndAmounts = game.sessions.reduce((sum, s) => sum + (s.endAmount || 0), 0)
@@ -162,9 +251,9 @@ function GameDetailContent() {
       alert('You must be logged in to join this game.')
       return
     }
-    if (isAlreadyJoined || isClosed) return
+    if (isAlreadyJoined || isClosed || game.status !== 'open') return
 
-    setJoinLoading(true)
+    setParticipantUpdating(true)
     try {
       const playerName = user.fullName || user.emailAddresses?.[0]?.emailAddress || 'Player'
       const success = await updateGameSession(game.id, user.id, playerName, 0, 0)
@@ -177,7 +266,30 @@ function GameDetailContent() {
       console.error('Error joining game:', error)
       alert('Failed to join game. Please try again.')
     } finally {
-      setJoinLoading(false)
+      setParticipantUpdating(false)
+    }
+  }
+
+  const handleQuickLeave = async () => {
+    if (!user?.id) {
+      alert('You must be logged in to leave this game.')
+      return
+    }
+    if (!isAlreadyJoined || game.status !== 'open') return
+
+    setParticipantUpdating(true)
+    try {
+      const success = await removeGameSession(game.id, user.id)
+      if (!success) {
+        alert('Failed to leave game. Please try again.')
+        return
+      }
+      await refreshGame()
+    } catch (error) {
+      console.error('Error leaving game:', error)
+      alert('Failed to leave game. Please try again.')
+    } finally {
+      setParticipantUpdating(false)
     }
   }
 
@@ -218,10 +330,20 @@ function GameDetailContent() {
                   Group: {group.name}
                 </p>
               )}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Badge variant={game.status === 'completed' ? 'secondary' : 'default'}>
                   {game.status === 'completed' ? 'Closed' : game.status === 'in-progress' ? 'In Progress' : 'Open'}
                 </Badge>
+                {isGroupOwner && game.status === 'open' && (
+                  <Button
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => changeGameStatus('in-progress')}
+                    disabled={statusUpdating}
+                  >
+                    {statusUpdating ? 'Starting...' : 'Start Game'}
+                  </Button>
+                )}
                 {isGroupOwner && (
                   <Button
                     variant={game.status === 'completed' ? 'outline' : 'destructive'}
@@ -252,17 +374,26 @@ function GameDetailContent() {
                 <Button
                   size="sm"
                   className="gap-2"
-                  onClick={handleQuickJoin}
-                  disabled={joinLoading || isAlreadyJoined || isClosed}
+                  onClick={isAlreadyJoined ? handleQuickLeave : handleQuickJoin}
+                  disabled={
+                    participantUpdating ||
+                    isClosed ||
+                    game.status === 'in-progress' ||
+                    game.status === 'completed'
+                  }
                 >
-                  <UserPlus className="h-4 w-4" />
+                  {isAlreadyJoined ? <LogOut className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
                   {isClosed
                     ? 'Game Closed'
-                    : isAlreadyJoined
-                      ? 'Joined'
-                      : joinLoading
-                        ? 'Joining...'
-                        : 'Join Game'}
+                    : game.status === 'in-progress'
+                      ? 'In Progress'
+                      : isAlreadyJoined
+                        ? participantUpdating
+                          ? 'Leaving...'
+                          : 'Leave Game'
+                        : participantUpdating
+                          ? 'Joining...'
+                          : 'Join Game'}
                 </Button>
               )}
               <Button
@@ -364,6 +495,7 @@ function GameDetailContent() {
                           min="0"
                           className="w-32"
                           value={session.buyIn}
+                          disabled={game.status === 'completed'}
                           onChange={(e) => {
                             const value = e.target.value
                             setEditingSessions(prev => {
@@ -382,6 +514,7 @@ function GameDetailContent() {
                           min="0"
                           className="w-32"
                           value={session.endAmount}
+                          disabled={game.status === 'completed'}
                           onChange={(e) => {
                             const value = e.target.value
                             setEditingSessions(prev => {
@@ -454,6 +587,58 @@ function GameDetailContent() {
           </Card>
         )}
 
+        {/* Closed game verification for current user */}
+        {user && isClosed && isAlreadyJoined && userSession && !sessionConfirmed && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Your Session Verification</CardTitle>
+              <CardDescription>
+                Review your buy-in and cash-out. You can confirm your session and, if you lost money, record payout details.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">Buy-In</p>
+                  <p className="text-lg font-semibold">${userSession.buyIn.toFixed(2)}</p>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">Cash Out</p>
+                  <p className="text-lg font-semibold">${userSession.endAmount.toFixed(2)}</p>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">Result</p>
+                  <p
+                    className={`text-lg font-semibold ${
+                      userSession.endAmount - userSession.buyIn >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}
+                  >
+                    {userSession.endAmount - userSession.buyIn >= 0 ? '+' : '-'}$
+                    {Math.abs(userSession.endAmount - userSession.buyIn).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                Use confirm to lock your session. If you lost money, you can add payout method and time during confirmation.
+              </p>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={handleConfirmSession}
+                >
+                  Confirm Session
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Confirmation and payout details are visible to you and the owner on this device.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Join / Personal Session Form */}
         {user && (
           <div id="join-game-section">
@@ -468,6 +653,67 @@ function GameDetailContent() {
           <Leaderboard games={[game]} singleGame={true} />
         )}
       </div>
+
+      {confirmDialogOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
+          <Card className="w-full max-w-lg">
+            <CardHeader>
+              <CardTitle>Confirm Your Session</CardTitle>
+              <CardDescription>
+                Review and confirm your session. If you paid out, add how and when you completed it.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">Buy-In</p>
+                  <p className="text-lg font-semibold">
+                    ${userSession?.buyIn.toFixed(2) ?? '0.00'}
+                  </p>
+                </div>
+                <div className="rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">Cash Out</p>
+                  <p className="text-lg font-semibold">
+                    ${userSession?.endAmount.toFixed(2) ?? '0.00'}
+                  </p>
+                </div>
+              </div>
+
+              {userLostMoney && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmMethod">How did you pay out?</Label>
+                    <Input
+                      id="confirmMethod"
+                      placeholder="Venmo @username, Zelle, Cash App, cash..."
+                      value={confirmMethod}
+                      onChange={(e) => setConfirmMethod(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPayoutTime">Payout completed at</Label>
+                    <Input
+                      id="confirmPayoutTime"
+                      type="datetime-local"
+                      value={confirmPayoutTime}
+                      onChange={(e) => setConfirmPayoutTime(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button variant="outline" type="button" onClick={() => setConfirmDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={handleConfirmDialogSave}>
+                  Confirm
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

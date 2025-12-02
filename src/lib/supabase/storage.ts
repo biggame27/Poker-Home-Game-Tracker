@@ -683,6 +683,43 @@ export async function updateGameSession(
   return true
 }
 
+export async function removeGameSession(
+  gameId: string,
+  userId: string
+): Promise<boolean> {
+  const supabase = createClient()
+
+  // Only allow removing from open games
+  const { data: gameStatusRow, error: statusError } = await supabase
+    .from('games')
+    .select('status')
+    .eq('id', gameId)
+    .single()
+
+  if (statusError || !gameStatusRow) {
+    console.error('Error verifying game status before remove:', statusError)
+    return false
+  }
+
+  if (gameStatusRow.status !== 'open') {
+    console.warn('Attempted to leave a non-open game; aborting.')
+    return false
+  }
+
+  const { error } = await supabase
+    .from('game_sessions')
+    .delete()
+    .eq('game_id', gameId)
+    .eq('user_id', userId)
+
+  if (error) {
+    console.error('Error removing game session:', error)
+    return false
+  }
+
+  return true
+}
+
 export async function updateGameStatus(
   gameId: string,
   status: 'open' | 'in-progress' | 'completed',
