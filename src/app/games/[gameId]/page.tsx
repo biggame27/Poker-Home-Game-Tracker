@@ -233,6 +233,7 @@ function GameDetailContent() {
   }
 
   const handleOpenAddMember = () => {
+    if (!game) return
     // Default to group mode if there are eligible members, otherwise guest
     const memberIdsInGame = new Set(game.sessions.map(s => s.userId).filter(Boolean) as string[])
     const eligibleMembers = (group?.members || []).filter(m => !memberIdsInGame.has(m.userId))
