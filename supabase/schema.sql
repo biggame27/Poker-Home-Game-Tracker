@@ -59,6 +59,17 @@ CREATE TABLE IF NOT EXISTS game_sessions (
   UNIQUE(game_id, user_id) -- One session per user per game (user_id can be null)
 );
 
+-- Claim requests (guest -> user claims)
+CREATE TABLE IF NOT EXISTS claim_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+  guest_name TEXT NOT NULL,
+  requester_id TEXT NOT NULL, -- Clerk user ID
+  requester_name TEXT,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'denied')) DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_groups_created_by ON groups(created_by);
 CREATE INDEX IF NOT EXISTS idx_groups_invite_code ON groups(invite_code);
@@ -69,6 +80,8 @@ CREATE INDEX IF NOT EXISTS idx_games_created_by ON games(created_by);
 CREATE INDEX IF NOT EXISTS idx_games_date ON games(date);
 CREATE INDEX IF NOT EXISTS idx_game_sessions_game_id ON game_sessions(game_id);
 CREATE INDEX IF NOT EXISTS idx_game_sessions_user_id ON game_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_claim_requests_group_id ON claim_requests(group_id);
+CREATE INDEX IF NOT EXISTS idx_claim_requests_requester ON claim_requests(requester_id);
 
 -- Function to generate unique invite codes
 CREATE OR REPLACE FUNCTION generate_invite_code()

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Leaderboard } from '@/components/Leaderboard'
 import { RunningTotalsChart } from '@/components/RunningTotalsChart'
 import { OverallStats } from '@/components/OverallStats'
-import { getGroupById, getGamesByGroup, deleteGame, deleteGroup, updateGroup } from '@/lib/supabase/storage'
+import { getGroupById, getGamesByGroup, deleteGame, deleteGroup, updateGroup, addGuestMember, removeGroupMember, removeGuestFromGroupSessions, getClaimRequests, submitClaimRequest, approveClaimRequest, denyClaimRequest } from '@/lib/supabase/storage'
 import type { Group, Game } from '@/types'
 import { Users, PlusCircle, Copy, Check, X, Trash2, EllipsisVertical } from 'lucide-react'
 import Link from 'next/link'
@@ -27,6 +27,8 @@ export default function GroupDetailPage() {
   const [confirmingGameId, setConfirmingGameId] = useState<string | null>(null)
   const [deletingGroup, setDeletingGroup] = useState(false)
   const [groupMenuOpen, setGroupMenuOpen] = useState(false)
+  const [addingGuest, setAddingGuest] = useState(false)
+  const [claimRequests, setClaimRequests] = useState<{ id: string; guestName: string; requesterId: string; requesterName?: string; status: 'pending' | 'approved' | 'denied' }[]>([])
 
   useEffect(() => {
     if (groupId) {
@@ -42,6 +44,8 @@ export default function GroupDetailPage() {
         setGroup(foundGroup)
         const groupGames = await getGamesByGroup(groupId)
         setGames(groupGames)
+        const claims = await getClaimRequests(groupId)
+        setClaimRequests(claims)
       }
     } catch (error) {
       console.error('Error loading group data:', error)
@@ -130,6 +134,105 @@ export default function GroupDetailPage() {
     setGroupMenuOpen(false)
   }
 
+  const handleKickMember = async (memberId: string) => {
+    if (!group || !user?.id) return
+    const confirmed = typeof window === 'undefined'
+      ? true
+      : window.confirm('Remove this member from the group? They will lose access.')
+
+    if (!confirmed) return
+
+    const success = await removeGroupMember(group.id, memberId, user.id)
+    if (success) {
+      setGroup(prev => prev ? { ...prev, members: prev.members.filter(m => m.userId !== memberId) } : prev)
+    } else {
+      setNotification({ type: 'error', message: 'Failed to remove member.' })
+    }
+  }
+
+  const handleAddGuest = async () => {
+    if (!group || !isOwner) return
+    const guestName = typeof window !== 'undefined'
+      ? window.prompt('Guest name to save for this group?')
+      : null
+
+    if (!guestName || guestName.trim() === '') return
+    const trimmed = guestName.trim()
+    const duplicateGuest = (group.members || []).some(
+      m => m.userId?.startsWith('guest-') && (m.userName || '').toLowerCase() === trimmed.toLowerCase()
+    )
+    if (duplicateGuest) {
+      const proceed = typeof window === 'undefined'
+        ? true
+        : window.confirm('Are you sure you want to add another guest with the same name?')
+      if (!proceed) return
+    }
+
+    setAddingGuest(true)
+    try {
+      const added = await addGuestMember(group.id, trimmed)
+      if (added) {
+        await loadData()
+      } else {
+        setNotification({ type: 'error', message: 'Failed to add guest. Please try again.' })
+      }
+    } catch (error) {
+      console.error('Error adding guest:', error)
+      setNotification({ type: 'error', message: 'An error occurred while adding the guest.' })
+    } finally {
+      setAddingGuest(false)
+    }
+  }
+
+  const handleRemoveGuestFromGames = async (guestName: string) => {
+    if (!group || !user?.id) return
+    const confirmed = typeof window === 'undefined'
+      ? true
+      : window.confirm(`Remove guest "${guestName}" from this group's games?`)
+    if (!confirmed) return
+
+    const success = await removeGuestFromGroupSessions(group.id, guestName)
+    if (success) {
+      await loadData()
+    } else {
+      setNotification({ type: 'error', message: 'Failed to remove guest.' })
+    }
+  }
+
+  const handleSubmitClaim = async (guestName: string) => {
+    if (!group || !user?.id) return
+    const res = await submitClaimRequest(group.id, guestName, user.id, user.fullName || user.username || user.primaryEmailAddress?.emailAddress || 'Member')
+    if (res) {
+      setClaimRequests(prev => {
+        const without = prev.filter(r => !(r.guestName.toLowerCase() === res.guestName.toLowerCase() && r.requesterId === res.requesterId))
+        return [...without, res]
+      })
+      setNotification({ type: 'error', message: 'Claim submitted. Waiting for owner approval.' })
+    } else {
+      setNotification({ type: 'error', message: 'Failed to submit claim.' })
+    }
+  }
+
+  const handleApproveClaim = async (requestId: string) => {
+    if (!user?.id) return
+    const success = await approveClaimRequest(requestId, user.id)
+    if (success) {
+      await loadData()
+    } else {
+      setNotification({ type: 'error', message: 'Failed to approve claim.' })
+    }
+  }
+
+  const handleDenyClaim = async (requestId: string) => {
+    if (!user?.id) return
+    const success = await denyClaimRequest(requestId, user.id)
+    if (success) {
+      await loadData()
+    } else {
+      setNotification({ type: 'error', message: 'Failed to deny claim.' })
+    }
+  }
+
   if (!isLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -162,14 +265,23 @@ export default function GroupDetailPage() {
 
   const isOwner = group.createdBy === user?.id
   const isMember = group.members.some(m => m.userId === user?.id)
+  const savedGuests = group.members.filter(m => m.userId?.startsWith('guest-'))
+  const regularMembers = group.members.filter(m => !m.userId?.startsWith('guest-'))
   const guestParticipants = Array.from(
     new Map(
       games
-        .flatMap(g => g.sessions.filter(s => (s as any).role === 'guest'))
-        .map(s => [s.playerName, { name: s.playerName }])
+        .flatMap(g =>
+          g.sessions
+            .filter(s => (s as any).role === 'guest')
+            .map(s => [s.playerName.toLowerCase(), { name: s.playerName, userId: s.userId }])
+        )
     ).values()
   )
-  const totalMemberDisplay = group.members.length + guestParticipants.length
+  const extraGuestParticipants = guestParticipants.filter(
+    gp => !savedGuests.some(g => g.userName.toLowerCase() === gp.name.toLowerCase())
+  )
+  const myClaimedGuests = claimRequests.filter(r => r.requesterId === user?.id)
+  const totalMemberDisplay = regularMembers.length + savedGuests.length + extraGuestParticipants.length
 
   return (
     <div className="min-h-screen bg-background">
@@ -318,13 +430,47 @@ export default function GroupDetailPage() {
 
         {/* Members List */}
         <Card>
-          <CardHeader>
-            <CardTitle>Members</CardTitle>
-            <CardDescription>People in this group</CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>Members</CardTitle>
+              <CardDescription>People in this group</CardDescription>
+            </div>
+            {isOwner && (
+              <Button size="sm" variant="outline" onClick={handleAddGuest} disabled={addingGuest}>
+                {addingGuest ? 'Saving...' : 'Add guest'}
+              </Button>
+            )}
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
+            {isOwner && claimRequests.filter(r => r.status === 'pending').length > 0 && (
+              <div className="rounded-lg border p-3 bg-muted/50 space-y-2">
+                <p className="text-sm font-semibold">Pending guest claims</p>
+                <div className="space-y-2">
+                  {claimRequests.filter(r => r.status === 'pending').map(r => (
+                    <div key={r.id} className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
+                      <div>
+                        <p className="font-medium">{r.guestName}</p>
+                        <p className="text-xs text-muted-foreground">Requested by {r.requesterName || 'User'}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => handleDenyClaim(r.id)}>
+                          Deny
+                        </Button>
+                        <Button size="sm" onClick={() => handleApproveClaim(r.id)}>
+                          Approve
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
-              {group.members.map((member) => (
+              <p className="text-sm font-semibold text-muted-foreground">Members</p>
+              {regularMembers.length === 0 && (
+                <p className="text-sm text-muted-foreground">No members yet.</p>
+              )}
+              {regularMembers.map((member) => (
                 <div
                   key={member.userId}
                   className="flex items-center justify-between p-3 border rounded-lg"
@@ -335,31 +481,138 @@ export default function GroupDetailPage() {
                       Joined {format(new Date(member.joinedAt), 'MMM dd, yyyy')}
                     </p>
                   </div>
-                  {member.role === 'owner' && (
-                    <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
-                      Owner
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {member.role === 'owner' && (
+                      <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                        Owner
+                      </span>
+                    )}
+                    {isOwner && member.role !== 'owner' && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleKickMember(member.userId)}
+                        aria-label="Remove member"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
-              {guestParticipants.length > 0 && (
-                <>
-                  {guestParticipants.map((guest) => (
-                    <div
-                      key={`guest-${guest.name}`}
-                      className="flex items-center justify-between p-3 border rounded-lg"
-                    >
-                      <div>
-                        <p className="font-medium">{guest.name}</p>
-                        <p className="text-sm text-muted-foreground">Added as guest (from games)</p>
-                      </div>
-                      <span className="text-xs px-2 py-1 bg-muted text-muted-foreground rounded-full">
-                        Guest
-                      </span>
-                    </div>
-                  ))}
-                </>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-muted-foreground">Guests</p>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  Saved + recent
+                </span>
+              </div>
+              {savedGuests.length === 0 && extraGuestParticipants.length === 0 && (
+                <p className="text-sm text-muted-foreground">No guests yet.</p>
               )}
+              {savedGuests.map((guest) => (
+                <div
+                  key={guest.userId}
+                  className="flex items-center justify-between p-3 border rounded-lg"
+                >
+                  <div>
+                    <p className="font-medium">{guest.userName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Saved guest · Joined {format(new Date(guest.joinedAt), 'MMM dd, yyyy')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200">
+                      Guest
+                    </span>
+                    {user && !isMember && (
+                      (() => {
+                        const mine = claimRequests.find(
+                          r => r.guestName.toLowerCase() === guest.userName.toLowerCase() && r.requesterId === user.id
+                        )
+                        if (mine?.status === 'pending') {
+                          return <span className="text-xs text-muted-foreground">Claim pending</span>
+                        }
+                        if (mine?.status === 'denied') {
+                          return <span className="text-xs text-destructive">Claim denied</span>
+                        }
+                        return (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleSubmitClaim(guest.userName)}
+                          >
+                            Claim
+                          </Button>
+                        )
+                      })()
+                    )}
+                    {isOwner && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleKickMember(guest.userId)}
+                        aria-label="Remove guest"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {extraGuestParticipants.map((guest) => (
+                <div
+                  key={`guest-${guest.userId || guest.name}`}
+                  className="flex items-center justify-between p-3 border rounded-lg"
+                >
+                  <div>
+                    <p className="font-medium">{guest.name}</p>
+                    <p className="text-sm text-muted-foreground">Guest from games</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs px-2 py-1 bg-muted text-muted-foreground rounded-full">
+                      Guest
+                    </span>
+                    {user && !isMember && (
+                      (() => {
+                        const mine = claimRequests.find(
+                          r => r.guestName.toLowerCase() === guest.name.toLowerCase() && r.requesterId === user.id
+                        )
+                        if (mine?.status === 'pending') {
+                          return <span className="text-xs text-muted-foreground">Claim pending</span>
+                        }
+                        if (mine?.status === 'denied') {
+                          return <span className="text-xs text-destructive">Claim denied</span>
+                        }
+                        return (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleSubmitClaim(guest.name)}
+                          >
+                            Claim
+                          </Button>
+                        )
+                      })()
+                    )}
+                    {isOwner && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleRemoveGuestFromGames(guest.name)}
+                        aria-label="Remove guest from games"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
