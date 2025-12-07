@@ -6,9 +6,11 @@ import type { Game } from '@/types'
 
 interface JoinGameFormProps {
   game: Game
+  onAddMember?: () => void
+  canAddMember?: boolean
 }
 
-export function JoinGameForm({ game }: JoinGameFormProps) {
+export function JoinGameForm({ game, onAddMember, canAddMember }: JoinGameFormProps) {
   const { user } = useUser()
 
   const renderParticipants = () => {
@@ -20,9 +22,12 @@ export function JoinGameForm({ game }: JoinGameFormProps) {
       )
     }
 
-    return (
+    const memberSessions = game.sessions.filter(s => s.userId)
+    const guestSessions = game.sessions.filter(s => !s.userId)
+
+    const renderList = (sessions: typeof game.sessions) => (
       <div className="space-y-2">
-        {game.sessions.map((session, index) => {
+        {sessions.map((session, index) => {
           const isCurrentUser = session.userId && session.userId === user?.id
           const profit = session.profit ?? (session.endAmount - session.buyIn)
 
@@ -39,6 +44,11 @@ export function JoinGameForm({ game }: JoinGameFormProps) {
                       You
                     </span>
                   )}
+                  {!session.userId && (
+                    <span className="text-[10px] uppercase tracking-wide rounded-full bg-muted text-muted-foreground px-2 py-0.5">
+                      Guest
+                    </span>
+                  )}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Buy-in: ${session.buyIn.toFixed(2)} | Cash out: ${session.endAmount.toFixed(2)}
@@ -52,12 +62,38 @@ export function JoinGameForm({ game }: JoinGameFormProps) {
         })}
       </div>
     )
+
+    return (
+      <div className="space-y-4">
+        {memberSessions.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Members</p>
+            {renderList(memberSessions)}
+          </div>
+        )}
+        {guestSessions.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Guests</p>
+            {renderList(guestSessions)}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Participants</CardTitle>
+        {canAddMember && onAddMember && (
+          <button
+            type="button"
+            className="text-sm font-medium text-primary hover:underline"
+            onClick={onAddMember}
+          >
+            Add member
+          </button>
+        )}
       </CardHeader>
       <CardContent>
         {renderParticipants()}

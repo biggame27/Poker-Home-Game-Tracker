@@ -47,6 +47,13 @@ function GameDetailContent() {
   const [disputeBuyIn, setDisputeBuyIn] = useState<string>('')
   const [disputePayout, setDisputePayout] = useState<string>('')
   const [disputeNoticeOpen, setDisputeNoticeOpen] = useState(false)
+  const [addMemberOpen, setAddMemberOpen] = useState(false)
+  const [addMemberMode, setAddMemberMode] = useState<'group' | 'guest'>('group')
+  const [selectedGroupMemberId, setSelectedGroupMemberId] = useState<string>('')
+  const [memberSearch, setMemberSearch] = useState('')
+  const [memberListOpen, setMemberListOpen] = useState(false)
+  const [memberName, setMemberName] = useState('')
+  const [memberSaving, setMemberSaving] = useState(false)
 
   const getNowLocal = () => {
     const now = new Date()
@@ -223,6 +230,73 @@ function GameDetailContent() {
     setSessionConfirmed(true)
     setDisputeDialogOpen(false)
     setDisputeNoticeOpen(true)
+  }
+
+  const handleOpenAddMember = () => {
+    if (!game) return
+    // Default to group mode if there are eligible members, otherwise guest
+    const memberIdsInGame = new Set(game.sessions.map(s => s.userId).filter(Boolean) as string[])
+    const eligibleMembers = (group?.members || []).filter(m => !memberIdsInGame.has(m.userId))
+    const defaultToGuest = eligibleMembers.length === 0
+    setAddMemberMode(defaultToGuest ? 'guest' : 'group')
+    if (defaultToGuest) {
+      setSelectedGroupMemberId('')
+      setMemberSearch('')
+      setMemberName('')
+      setMemberListOpen(false)
+    } else {
+      setSelectedGroupMemberId(eligibleMembers[0].userId)
+      setMemberSearch('')
+      setMemberName(eligibleMembers[0].userName || '')
+      setMemberListOpen(true)
+    }
+    setAddMemberOpen(true)
+  }
+
+  const handleSaveMember = async () => {
+    if (!game) return
+    const memberIdsInGame = new Set(game.sessions.map(s => s.userId).filter(Boolean) as string[])
+    const eligibleMembers = (group?.members || []).filter(m => !memberIdsInGame.has(m.userId))
+    let userId: string | null = null
+    let playerName = memberName.trim()
+
+    if (addMemberMode === 'group') {
+      if (!selectedGroupMemberId) {
+        alert('Please select a group member.')
+        return
+      }
+      const member = eligibleMembers.find(m => m.userId === selectedGroupMemberId)
+      if (!member) {
+        alert('Selected member is already in the game or not available.')
+        return
+      }
+      userId = member.userId
+      playerName = member.userName
+    } else {
+      if (!playerName) {
+        alert('Please enter a guest name.')
+        return
+      }
+    }
+
+    const buyInAmount = 0
+    const endAmount = 0
+
+    setMemberSaving(true)
+    try {
+      const success = await updateGameSession(game.id, userId, playerName, buyInAmount, endAmount)
+      if (!success) {
+        alert('Failed to add member. Make sure the game is not closed.')
+        return
+      }
+      setAddMemberOpen(false)
+      await refreshGame()
+    } catch (error) {
+      console.error('Error adding member:', error)
+      alert('Failed to add member. Please try again.')
+    } finally {
+      setMemberSaving(false)
+    }
   }
 
   const copyGameLink = () => {
@@ -696,6 +770,8 @@ function GameDetailContent() {
           <div id="join-game-section">
             <JoinGameForm 
               game={game}
+              canAddMember={canAdminEdit && !isClosed}
+              onAddMember={canAdminEdit && !isClosed ? handleOpenAddMember : undefined}
             />
           </div>
         )}
@@ -841,6 +917,133 @@ function GameDetailContent() {
               <Button variant="outline" onClick={() => setDisputeNoticeOpen(false)}>
                 Close
               </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {addMemberOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
+          <Card className="w-full max-w-xl">
+            <CardHeader>
+              <CardTitle>Add Member</CardTitle>
+              <CardDescription>
+                Add a group member or a guest. Guests are saved without an account so they can claim their stats later.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="memberType">Member type</Label>
+                <Select
+                  value={addMemberMode}
+                  onValueChange={(val: 'group' | 'guest') => {
+                    if (val === 'group') {
+                      const memberIdsInGame = new Set(game.sessions.map(s => s.userId).filter(Boolean) as string[])
+                      const eligible = (group?.members || []).filter(m => !memberIdsInGame.has(m.userId))
+                      setAddMemberMode('group')
+                      setSelectedGroupMemberId(eligible[0]?.userId || '')
+                      setMemberName(eligible[0]?.userName || '')
+                      setMemberSearch('')
+                    } else {
+                      setAddMemberMode('guest')
+                      setSelectedGroupMemberId('')
+                      setMemberName('')
+                      setMemberSearch('')
+                    }
+                  }}
+                >
+                  <SelectTrigger id="memberType" className="w-full">
+                    <SelectValue placeholder="Choose member type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="group">Group member</SelectItem>
+                    <SelectItem value="guest">Guest</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {addMemberMode === 'group' ? (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="memberSearch">Search group members</Label>
+                    <Input
+                      id="memberSearch"
+                      placeholder="Search by name"
+                      value={memberSearch}
+                      onChange={(e) => {
+                        setMemberSearch(e.target.value)
+                        setMemberListOpen(true)
+                      }}
+                      onFocus={() => setMemberListOpen(true)}
+                      onBlur={() => setMemberListOpen(false)}
+                    />
+                  </div>
+                  {memberListOpen && (
+                    <div className="space-y-1 max-h-48 overflow-y-auto rounded-md border p-2">
+                      {(() => {
+                        const filtered = (group?.members || []).filter(m =>
+                          (m.userName || 'Member')
+                            .toLowerCase()
+                            .includes((memberSearch || '').toLowerCase())
+                        )
+
+                        if (filtered.length === 0) {
+                          return <p className="text-xs text-muted-foreground px-1">No members match your search.</p>
+                        }
+
+                        return filtered.map(m => {
+                          const alreadyInGame = game.sessions.some(s => s.userId === m.userId)
+                          return (
+                            <button
+                              type="button"
+                              key={m.userId}
+                              className={`w-full text-left px-2 py-1.5 rounded-md border flex items-center justify-between text-sm ${
+                                selectedGroupMemberId === m.userId ? 'border-primary text-primary' : 'border-muted'
+                              } ${alreadyInGame ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                if (alreadyInGame) return
+                                setSelectedGroupMemberId(m.userId)
+                                const chosen = m.userName || 'Member'
+                                setMemberName(chosen)
+                                setMemberSearch(chosen)
+                                setMemberListOpen(false)
+                              }}
+                              disabled={alreadyInGame}
+                            >
+                              <span className="truncate">{m.userName || 'Member'}</span>
+                              {alreadyInGame && (
+                                <span className="text-[10px] uppercase tracking-wide rounded-full bg-muted text-muted-foreground px-2 py-0.5">
+                                  Added
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })
+                      })()}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="memberName">Guest name</Label>
+                  <Input
+                    id="memberName"
+                    placeholder="Player name"
+                    value={memberName}
+                    onChange={(e) => setMemberName(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button variant="outline" type="button" onClick={() => setAddMemberOpen(false)} disabled={memberSaving}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={handleSaveMember} disabled={memberSaving}>
+                  {memberSaving ? 'Adding...' : 'Add member'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

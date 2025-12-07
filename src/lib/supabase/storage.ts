@@ -50,7 +50,7 @@ export async function getGroups(userId: string): Promise<Group[]> {
     .eq('user_id', userId)
   
   if (memberError) {
-    console.error('Error fetching member groups:', memberError)
+    console.error('Error fetching member groups:', memberError?.message || memberError, { code: (memberError as any)?.code })
     return []
   }
   
@@ -134,7 +134,7 @@ export async function getGroupById(groupId: string): Promise<Group | null> {
     .single()
   
   if (error || !data) {
-    console.error('Error fetching group:', error)
+    console.error('Error fetching group:', error?.message || error, { code: (error as any)?.code })
     return null
   }
   
@@ -302,7 +302,7 @@ export async function getUserGroups(userId: string): Promise<string[]> {
     .eq('user_id', userId)
   
   if (error) {
-    console.error('Error fetching user groups:', error)
+    console.error('Error fetching user groups:', error?.message || error, { code: (error as any)?.code })
     return []
   }
   
@@ -429,10 +429,11 @@ export async function getGames(userId: string): Promise<Game[]> {
     status: g.status as 'open' | 'in-progress' | 'completed',
     sessions: (g.game_sessions || []).map((s: any) => ({
       playerName: s.player_name,
-      buyIn: parseFloat(s.buy_in.toString()),
-      endAmount: parseFloat(s.end_amount.toString()),
-      profit: parseFloat(s.profit.toString()),
-      userId: s.user_id || undefined
+      buyIn: parseFloat((s.buy_in ?? 0).toString()),
+      endAmount: parseFloat((s.end_amount ?? 0).toString()),
+      profit: parseFloat((s.profit ?? 0).toString()),
+      role: (s.role as GameSession['role']) || 'guest',
+      userId: s.user_id || undefined,
     }))
   }))
 }
@@ -464,10 +465,11 @@ export async function getGamesByGroup(groupId: string): Promise<Game[]> {
     status: g.status as 'open' | 'in-progress' | 'completed',
     sessions: (g.game_sessions || []).map((s: any) => ({
       playerName: s.player_name,
-      buyIn: parseFloat(s.buy_in.toString()),
-      endAmount: parseFloat(s.end_amount.toString()),
-      profit: parseFloat(s.profit.toString()),
-      userId: s.user_id || undefined
+      buyIn: parseFloat((s.buy_in ?? 0).toString()),
+      endAmount: parseFloat((s.end_amount ?? 0).toString()),
+      profit: parseFloat((s.profit ?? 0).toString()),
+      role: (s.role as GameSession['role']) || 'guest',
+      userId: s.user_id || undefined,
     }))
   }))
 }
@@ -499,10 +501,11 @@ export async function getGameById(gameId: string): Promise<Game | null> {
     status: game.status as 'open' | 'in-progress' | 'completed',
     sessions: (game.game_sessions || []).map((s: any) => ({
       playerName: s.player_name,
-      buyIn: parseFloat(s.buy_in.toString()),
-      endAmount: parseFloat(s.end_amount.toString()),
-      profit: parseFloat(s.profit.toString()),
-      userId: s.user_id || undefined
+      buyIn: parseFloat((s.buy_in ?? 0).toString()),
+      endAmount: parseFloat((s.end_amount ?? 0).toString()),
+      profit: parseFloat((s.profit ?? 0).toString()),
+      role: (s.role as GameSession['role']) || 'guest',
+      userId: s.user_id || undefined,
     }))
   }
 }
@@ -538,14 +541,15 @@ export async function getGamesByUser(userId: string): Promise<Game[]> {
       createdBy: g.created_by,
       createdAt: g.created_at,
       status: g.status as 'open' | 'in-progress' | 'completed',
-      sessions: (g.game_sessions || []).map((s: any) => ({
-        playerName: s.player_name,
-        buyIn: parseFloat(s.buy_in.toString()),
-        endAmount: parseFloat(s.end_amount.toString()),
-        profit: parseFloat(s.profit.toString()),
-        userId: s.user_id || undefined
-      }))
+    sessions: (g.game_sessions || []).map((s: any) => ({
+      playerName: s.player_name,
+      buyIn: parseFloat((s.buy_in ?? 0).toString()),
+      endAmount: parseFloat((s.end_amount ?? 0).toString()),
+      profit: parseFloat((s.profit ?? 0).toString()),
+      role: (s.role as GameSession['role']) || 'guest',
+      userId: s.user_id || undefined,
     }))
+  }))
 }
 
 export async function createGame(
@@ -587,6 +591,7 @@ export async function createGame(
       user_id: userId,
       buy_in: 0,
       end_amount: 0,
+      role: 'host',
     })
   
   if (sessionError) {
@@ -672,6 +677,7 @@ export async function updateGameSession(
         user_id: userId,
         buy_in: buyIn,
         end_amount: endAmount,
+        role: userId ? 'member' : 'guest',
       })
     
     if (error) {
