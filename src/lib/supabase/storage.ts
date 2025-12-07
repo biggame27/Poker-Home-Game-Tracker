@@ -9,6 +9,23 @@ const normalizeDateString = (value: string) =>
   value.includes('T') ? value : `${value}T00:00:00`
 
 const PERSONAL_GROUP_NAME = 'Personal Games'
+const generateGuestUserId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `guest-${crypto.randomUUID()}`
+  }
+  return `guest-${Math.random().toString(36).slice(2, 10)}${Date.now()}`
+}
+
+async function isGroupOwner(userId: string, groupId: string) {
+  const supabase = createClient()
+  const { data: groupRow, error } = await supabase
+    .from('groups')
+    .select('created_by')
+    .eq('id', groupId)
+    .single()
+  if (error || !groupRow) return false
+  return groupRow.created_by === userId
+}
 
 // Helper to ensure user exists in database
 async function ensureUser(clerkId: string, email?: string, fullName?: string) {
@@ -184,6 +201,263 @@ export async function getGroupByInviteCode(inviteCode: string): Promise<Group | 
       role: m.role as 'owner' | 'member'
     }))
   }
+}
+
+export async function addGuestMember(
+  groupId: string,
+  guestName: string
+): Promise<GroupMember | null> {
+  const supabase = createClient()
+  const trimmed = guestName.trim()
+  if (!trimmed) return null
+
+  const guestId = generateGuestUserId()
+  const { data, error } = await supabase
+    .from('group_members')
+    .insert({
+      group_id: groupId,
+      user_id: guestId,
+      user_name: trimmed,
+      role: 'member',
+    })
+    .select()
+    .single()
+
+  if (error || !data) {
+    console.error('Error adding guest member:', error)
+    return null
+  }
+
+  return {
+    userId: data.user_id,
+    userName: data.user_name,
+    joinedAt: data.joined_at,
+    role: 'member',
+  }
+}
+
+export async function removeGroupMember(
+  groupId: string,
+  memberUserId: string,
+  actingUserId: string
+): Promise<boolean> {
+  const supabase = createClient()
+  // Only group owner can kick
+  const owner = await isGroupOwner(actingUserId, groupId)
+  if (!owner) {
+    console.warn('Unauthorized group member removal attempt')
+    return false
+  }
+
+  const { error } = await supabase
+    .from('group_members')
+    .delete()
+    .eq('group_id', groupId)
+    .eq('user_id', memberUserId)
+
+  if (error) {
+    console.error('Error removing group member:', error)
+    return false
+  }
+
+  return true
+}
+
+type ClaimRequest = {
+  id: string
+  groupId: string
+  guestName: string
+  requesterId: string
+  requesterName?: string
+  status: 'pending' | 'approved' | 'denied'
+}
+
+export async function submitClaimRequest(
+  groupId: string,
+  guestName: string,
+  requesterId: string,
+  requesterName?: string
+): Promise<ClaimRequest | null> {
+  const supabase = createClient()
+  const trimmed = guestName.trim()
+  if (!trimmed) return null
+
+  const { data, error } = await supabase
+    .from('claim_requests')
+    .upsert(
+      {
+        group_id: groupId,
+        guest_name: trimmed,
+        requester_id: requesterId,
+        requester_name: requesterName || null,
+        status: 'pending',
+      },
+      { onConflict: 'group_id,guest_name,requester_id' }
+    )
+    .select()
+    .single()
+
+  if (error || !data) {
+    console.error('Error submitting claim request:', error)
+    return null
+  }
+
+  return {
+    id: data.id,
+    groupId: data.group_id,
+    guestName: data.guest_name,
+    requesterId: data.requester_id,
+    requesterName: data.requester_name || undefined,
+    status: data.status,
+  }
+}
+
+export async function getClaimRequests(groupId: string): Promise<ClaimRequest[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('claim_requests')
+    .select('*')
+    .eq('group_id', groupId)
+
+  if (error) {
+    console.error('Error fetching claim requests:', error)
+    return []
+  }
+
+  return (data || []).map(d => ({
+    id: d.id,
+    groupId: d.group_id,
+    guestName: d.guest_name,
+    requesterId: d.requester_id,
+    requesterName: d.requester_name || undefined,
+    status: d.status,
+  }))
+}
+
+async function mergeGuestSessionsToUser(
+  groupId: string,
+  guestName: string,
+  targetUserId: string,
+  targetUserName?: string
+): Promise<boolean> {
+  const supabase = createClient()
+
+  const { data: games, error: gamesError } = await supabase
+    .from('games')
+    .select('id')
+    .eq('group_id', groupId)
+
+  if (gamesError) {
+    console.error('Error fetching games for merge:', gamesError)
+    return false
+  }
+
+  const gameIds = (games || []).map(g => g.id)
+  if (gameIds.length === 0) return true
+
+  const { error: updateError } = await supabase
+    .from('game_sessions')
+    .update({
+      user_id: targetUserId,
+      role: 'member',
+      player_name: targetUserName || guestName,
+    })
+    .in('game_id', gameIds)
+    .ilike('player_name', guestName)
+    .or('user_id.is.null,user_id.ilike.guest-%')
+
+  if (updateError) {
+    console.error('Error merging guest sessions:', updateError)
+    return false
+  }
+
+  return true
+}
+
+export async function approveClaimRequest(
+  requestId: string,
+  actingUserId: string
+): Promise<boolean> {
+  const supabase = createClient()
+
+  const { data: req, error } = await supabase
+    .from('claim_requests')
+    .select('*')
+    .eq('id', requestId)
+    .single()
+
+  if (error || !req) {
+    console.error('Error fetching claim request:', error)
+    return false
+  }
+
+  const isOwnerUser = await isGroupOwner(actingUserId, req.group_id)
+  if (!isOwnerUser) {
+    console.warn('Unauthorized claim approval attempt')
+    return false
+  }
+
+  const merged = await mergeGuestSessionsToUser(req.group_id, req.guest_name, req.requester_id, req.requester_name)
+  if (!merged) return false
+
+  // Add as group member if not already
+  const { data: existingMember } = await supabase
+    .from('group_members')
+    .select('id')
+    .eq('group_id', req.group_id)
+    .eq('user_id', req.requester_id)
+    .maybeSingle()
+
+  if (!existingMember) {
+    await supabase.from('group_members').insert({
+      group_id: req.group_id,
+      user_id: req.requester_id,
+      user_name: req.requester_name || 'Member',
+      role: 'member',
+    })
+  }
+
+  await supabase
+    .from('claim_requests')
+    .update({ status: 'approved' })
+    .eq('id', requestId)
+
+  return true
+}
+
+export async function denyClaimRequest(
+  requestId: string,
+  actingUserId: string
+): Promise<boolean> {
+  const supabase = createClient()
+  const { data: req, error } = await supabase
+    .from('claim_requests')
+    .select('group_id')
+    .eq('id', requestId)
+    .single()
+
+  if (error || !req) {
+    console.error('Error fetching claim request:', error)
+    return false
+  }
+
+  const isOwnerUser = await isGroupOwner(actingUserId, req.group_id)
+  if (!isOwnerUser) {
+    console.warn('Unauthorized claim denial attempt')
+    return false
+  }
+
+  const { error: delError } = await supabase
+    .from('claim_requests')
+    .update({ status: 'denied' })
+    .eq('id', requestId)
+
+  if (delError) {
+    console.error('Error denying claim request:', delError)
+    return false
+  }
+
+  return true
 }
 
 export async function createGroup(
@@ -606,9 +880,12 @@ export async function updateGameSession(
   userId: string | null,
   playerName: string,
   buyIn: number,
-  endAmount: number
+  endAmount: number,
+  roleOverride?: GameSession['role']
 ): Promise<boolean> {
   const supabase = createClient()
+  const allowedRoles: GameSession['role'][] = ['guest', 'member', 'bank', 'host', 'admin']
+  const roleToUse = allowedRoles.includes(roleOverride as any) ? roleOverride : undefined
 
   // Prevent edits to closed games
   const { data: gameStatusRow, error: statusError } = await supabase
@@ -660,6 +937,7 @@ export async function updateGameSession(
         player_name: playerName,
         buy_in: buyIn,
         end_amount: endAmount,
+        role: roleToUse || (userId ? 'member' : 'guest'),
       })
       .eq('id', existing.id)
     
@@ -677,7 +955,7 @@ export async function updateGameSession(
         user_id: userId,
         buy_in: buyIn,
         end_amount: endAmount,
-        role: userId ? 'member' : 'guest',
+        role: roleToUse || (userId ? 'member' : 'guest'),
       })
     
     if (error) {
@@ -720,6 +998,85 @@ export async function removeGameSession(
 
   if (error) {
     console.error('Error removing game session:', error)
+    return false
+  }
+
+  return true
+}
+
+export async function removeGameParticipantAsAdmin(
+  gameId: string,
+  participantUserId: string,
+  actingUserId: string
+): Promise<boolean> {
+  const supabase = createClient()
+
+  // Verify game and group ownership
+  const { data: gameRow, error: fetchError } = await supabase
+    .from('games')
+    .select('group_id, status, created_by')
+    .eq('id', gameId)
+    .single()
+
+  if (fetchError || !gameRow) {
+    console.error('Error verifying game for removal:', fetchError)
+    return false
+  }
+
+  if (gameRow.status === 'completed') {
+    console.warn('Attempted to remove from a completed game; aborting.')
+    return false
+  }
+
+  const owner = await isGroupOwner(actingUserId, gameRow.group_id)
+  const isHost = gameRow.created_by === actingUserId
+  if (!owner && !isHost) {
+    console.warn('Unauthorized game participant removal attempt.')
+    return false
+  }
+
+  const { error } = await supabase
+    .from('game_sessions')
+    .delete()
+    .eq('game_id', gameId)
+    .eq('user_id', participantUserId)
+
+  if (error) {
+    console.error('Error removing game participant:', error)
+    return false
+  }
+
+  return true
+}
+
+export async function removeGuestFromGroupSessions(
+  groupId: string,
+  playerName: string
+): Promise<boolean> {
+  const supabase = createClient()
+
+  // Get game ids for the group
+  const { data: games, error: gamesError } = await supabase
+    .from('games')
+    .select('id')
+    .eq('group_id', groupId)
+
+  if (gamesError || !games?.length) {
+    if (gamesError) console.error('Error fetching games for guest removal:', gamesError)
+    return false
+  }
+
+  const gameIds = games.map(g => g.id)
+
+  const { error } = await supabase
+    .from('game_sessions')
+    .delete()
+    .in('game_id', gameIds)
+    .ilike('player_name', playerName)
+    .or('user_id.is.null,user_id.ilike.guest-%')
+
+  if (error) {
+    console.error('Error deleting guest sessions:', error)
     return false
   }
 

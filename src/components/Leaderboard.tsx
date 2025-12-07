@@ -116,9 +116,10 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
               const avgProfit = !singleGame && player.gamesPlayed > 0 
                 ? player.totalProfit / player.gamesPlayed 
                 : 0
+              const key = player.userId ? `user-${player.userId}` : `name-${player.name}-${index}`
               
               return (
-                <TableRow key={player.name || player.userId || index}>
+                <TableRow key={key}>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {getRankIcon(index)}
