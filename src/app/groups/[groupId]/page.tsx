@@ -834,12 +834,14 @@ export default function GroupDetailPage() {
                 <CardTitle>Games</CardTitle>
                 <CardDescription>Click on a game to view or join</CardDescription>
               </div>
-              <Link href={`/games/new?groupId=${groupId}`}>
-                <Button size="sm" className="gap-2">
-                  <PlusCircle className="h-4 w-4" />
-                  New Game
-                </Button>
-              </Link>
+              {isOwnerOrAdmin && (
+                <Link href={`/games/new?groupId=${groupId}`}>
+                  <Button size="sm" className="gap-2">
+                    <PlusCircle className="h-4 w-4" />
+                    New Game
+                  </Button>
+                </Link>
+              )}
             </div>
           </CardHeader>
           <CardContent>
