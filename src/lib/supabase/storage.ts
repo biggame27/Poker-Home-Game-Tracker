@@ -982,6 +982,13 @@ export async function createGame(
   
   await ensureUser(userId)
   
+  // Check if user is owner or admin of the group
+  const isOwnerOrAdmin = await isGroupOwnerOrAdmin(userId, groupId)
+  if (!isOwnerOrAdmin) {
+    console.error('Unauthorized: Only owners and admins can create games')
+    return null
+  }
+  
   // Create game
   const { data: game, error: gameError } = await supabase
     .from('games')
