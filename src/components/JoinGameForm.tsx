@@ -1,9 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Trash2 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Trash2, Pencil } from 'lucide-react'
+import { updateGroupMemberName } from '@/lib/supabase/storage'
 import type { Game } from '@/types'
 
 interface JoinGameFormProps {
@@ -12,10 +15,48 @@ interface JoinGameFormProps {
   canAddMember?: boolean
   canKick?: boolean
   onKickParticipant?: (userId: string, playerName: string) => void
+  groupId?: string
+  onNameUpdate?: () => void
 }
 
-export function JoinGameForm({ game, onAddMember, canAddMember, canKick = false, onKickParticipant }: JoinGameFormProps) {
+export function JoinGameForm({ game, onAddMember, canAddMember, canKick = false, onKickParticipant, groupId, onNameUpdate }: JoinGameFormProps) {
   const { user } = useUser()
+  const [editingSessionUserId, setEditingSessionUserId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+  const [savingName, setSavingName] = useState(false)
+
+  const handleStartEditName = (sessionUserId: string, currentName: string) => {
+    setEditingSessionUserId(sessionUserId)
+    setEditingName(currentName)
+  }
+
+  const handleCancelEditName = () => {
+    setEditingSessionUserId(null)
+    setEditingName('')
+  }
+
+  const handleSaveName = async () => {
+    if (!groupId || !user?.id || !editingSessionUserId) return
+    
+    const trimmed = editingName.trim()
+    if (!trimmed || trimmed.length === 0) {
+      return
+    }
+
+    setSavingName(true)
+    try {
+      const success = await updateGroupMemberName(groupId, editingSessionUserId, trimmed, user.id)
+      if (success) {
+        setEditingSessionUserId(null)
+        setEditingName('')
+        onNameUpdate?.()
+      }
+    } catch (error) {
+      console.error('Error updating name:', error)
+    } finally {
+      setSavingName(false)
+    }
+  }
 
   const renderParticipants = () => {
     if (game.sessions.length === 0) {
@@ -40,40 +81,96 @@ export function JoinGameForm({ game, onAddMember, canAddMember, canKick = false,
               {memberSessions.map((session, index) => {
                 const isCurrentUser = session.userId && session.userId === user?.id
                 const profit = session.profit ?? (session.endAmount - session.buyIn)
+                const isEditing = editingSessionUserId === session.userId
+                
                 return (
                   <div
                     key={session.userId || `${session.playerName}-${index}`}
                     className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
                   >
-                    <div>
-                      <p className="font-medium flex items-center gap-2">
-                        {session.playerName}
-                        {isCurrentUser && (
-                          <span className="text-[10px] uppercase tracking-wide rounded-full bg-primary/10 text-primary px-2 py-0.5">
-                            You
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Buy-in ${session.buyIn.toFixed(2)} · Cash-out ${session.endAmount.toFixed(2)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`text-sm font-semibold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {profit >= 0 ? '+' : '-'}${Math.abs(profit).toFixed(2)}
-                      </div>
-                      {canKick && session.userId && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => onKickParticipant?.(session.userId!, session.playerName)}
-                          aria-label="Remove player"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                    <div className="flex-1">
+                      {isEditing && groupId ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleSaveName()
+                              } else if (e.key === 'Escape') {
+                                handleCancelEditName()
+                              }
+                            }}
+                            disabled={savingName}
+                            className="h-8 flex-1"
+                            autoFocus
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={handleSaveName}
+                            disabled={savingName || !editingName.trim()}
+                            className="h-8 px-2"
+                          >
+                            {savingName ? '...' : '✓'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={handleCancelEditName}
+                            disabled={savingName}
+                            className="h-8 px-2"
+                          >
+                            ✕
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="font-medium flex items-center gap-2">
+                            {session.playerName}
+                            {isCurrentUser && (
+                              <>
+                                <span className="text-[10px] uppercase tracking-wide rounded-full bg-primary/10 text-primary px-2 py-0.5">
+                                  You
+                                </span>
+                                {groupId && (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => handleStartEditName(session.userId!, session.playerName)}
+                                    aria-label="Edit your name"
+                                    className="h-6 w-6"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Buy-in ${session.buyIn.toFixed(2)} · Cash-out ${session.endAmount.toFixed(2)}
+                          </p>
+                        </>
                       )}
                     </div>
+                    {!isEditing && (
+                      <div className="flex items-center gap-2">
+                        <div className={`text-sm font-semibold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {profit >= 0 ? '+' : '-'}${Math.abs(profit).toFixed(2)}
+                        </div>
+                        {canKick && session.userId && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => onKickParticipant?.(session.userId!, session.playerName)}
+                            aria-label="Remove player"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -98,7 +195,7 @@ export function JoinGameForm({ game, onAddMember, canAddMember, canKick = false,
                       <p className="font-medium flex items-center gap-2">
                         {session.playerName}
                         <span className="text-[10px] uppercase tracking-wide rounded-full bg-muted text-muted-foreground px-2 py-0.5">
-                          {!session.userId ? 'One-time' : 'Guest'}
+                          Guest
                         </span>
                       </p>
                       <p className="text-xs text-muted-foreground">

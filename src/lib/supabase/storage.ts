@@ -27,6 +27,23 @@ async function isGroupOwner(userId: string, groupId: string) {
   return groupRow.created_by === userId
 }
 
+async function isGroupAdmin(userId: string, groupId: string) {
+  const supabase = createClient()
+  const { data: memberRow } = await supabase
+    .from('group_members')
+    .select('role')
+    .eq('group_id', groupId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  return memberRow?.role === 'admin'
+}
+
+async function isGroupOwnerOrAdmin(userId: string, groupId: string) {
+  const isOwner = await isGroupOwner(userId, groupId)
+  if (isOwner) return true
+  return await isGroupAdmin(userId, groupId)
+}
+
 // Helper to ensure user exists in database
 async function ensureUser(clerkId: string, email?: string, fullName?: string) {
   try {
@@ -118,7 +135,7 @@ export async function getGroups(userId: string): Promise<Group[]> {
         userId: m.user_id,
         userName: m.user_name,
         joinedAt: m.joined_at,
-        role: m.role as 'owner' | 'member'
+        role: m.role as 'owner' | 'admin' | 'member'
       }))
     }))
 
@@ -166,7 +183,7 @@ export async function getGroupById(groupId: string): Promise<Group | null> {
       userId: m.user_id,
       userName: m.user_name,
       joinedAt: m.joined_at,
-      role: m.role as 'owner' | 'member'
+      role: m.role as 'owner' | 'admin' | 'member'
     }))
   }
 }
@@ -198,7 +215,7 @@ export async function getGroupByInviteCode(inviteCode: string): Promise<Group | 
       userId: m.user_id,
       userName: m.user_name,
       joinedAt: m.joined_at,
-      role: m.role as 'owner' | 'member'
+      role: m.role as 'owner' | 'admin' | 'member'
     }))
   }
 }
@@ -242,7 +259,7 @@ export async function removeGroupMember(
   actingUserId: string
 ): Promise<boolean> {
   const supabase = createClient()
-  // Only group owner can kick
+  // Only group owner can remove members (admins cannot)
   const owner = await isGroupOwner(actingUserId, groupId)
   if (!owner) {
     console.warn('Unauthorized group member removal attempt')
@@ -263,20 +280,126 @@ export async function removeGroupMember(
   return true
 }
 
+export async function promoteToAdmin(
+  groupId: string,
+  memberUserId: string,
+  actingUserId: string
+): Promise<boolean> {
+  const supabase = createClient()
+  // Only group owner can promote members
+  const owner = await isGroupOwner(actingUserId, groupId)
+  if (!owner) {
+    console.warn('Unauthorized member promotion attempt')
+    return false
+  }
+
+  // Don't allow promoting the owner
+  const isOwner = await isGroupOwner(memberUserId, groupId)
+  if (isOwner) {
+    console.warn('Cannot promote owner to admin')
+    return false
+  }
+
+  // First check if the member exists
+  const { data: existingMember, error: checkError } = await supabase
+    .from('group_members')
+    .select('id, role')
+    .eq('group_id', groupId)
+    .eq('user_id', memberUserId)
+    .single()
+
+  if (checkError || !existingMember) {
+    console.error('Error finding member to promote:', checkError)
+    return false
+  }
+
+  const { data, error } = await supabase
+    .from('group_members')
+    .update({ role: 'admin' })
+    .eq('group_id', groupId)
+    .eq('user_id', memberUserId)
+    .select()
+
+  if (error) {
+    console.error('Error promoting member to admin:', error)
+    return false
+  }
+
+  if (!data || data.length === 0) {
+    console.error('No rows updated when promoting member')
+    return false
+  }
+
+  return true
+}
+
+export async function demoteFromAdmin(
+  groupId: string,
+  memberUserId: string,
+  actingUserId: string
+): Promise<boolean> {
+  const supabase = createClient()
+  // Only group owner can demote admins
+  const owner = await isGroupOwner(actingUserId, groupId)
+  if (!owner) {
+    console.warn('Unauthorized admin demotion attempt')
+    return false
+  }
+
+  // Don't allow demoting the owner
+  const isOwner = await isGroupOwner(memberUserId, groupId)
+  if (isOwner) {
+    console.warn('Cannot demote owner')
+    return false
+  }
+
+  // First check if the member exists
+  const { data: existingMember, error: checkError } = await supabase
+    .from('group_members')
+    .select('id, role')
+    .eq('group_id', groupId)
+    .eq('user_id', memberUserId)
+    .single()
+
+  if (checkError || !existingMember) {
+    console.error('Error finding admin to demote:', checkError)
+    return false
+  }
+
+  const { data, error } = await supabase
+    .from('group_members')
+    .update({ role: 'member' })
+    .eq('group_id', groupId)
+    .eq('user_id', memberUserId)
+    .select()
+
+  if (error) {
+    console.error('Error demoting admin to member:', error)
+    return false
+  }
+
+  if (!data || data.length === 0) {
+    console.error('No rows updated when demoting admin')
+    return false
+  }
+
+  return true
+}
+
 type ClaimRequest = {
   id: string
   groupId: string
   guestName: string
   requesterId: string
-  requesterName?: string
-  status: 'pending' | 'approved' | 'denied'
+  requesterEmail?: string
+  status: 'pending' | 'approved'
 }
 
 export async function submitClaimRequest(
   groupId: string,
   guestName: string,
   requesterId: string,
-  requesterName?: string
+  requesterEmail?: string
 ): Promise<ClaimRequest | null> {
   const supabase = createClient()
   const trimmed = guestName.trim()
@@ -289,7 +412,7 @@ export async function submitClaimRequest(
         group_id: groupId,
         guest_name: trimmed,
         requester_id: requesterId,
-        requester_name: requesterName || null,
+        requester_email: requesterEmail || null,
         status: 'pending',
       },
       { onConflict: 'group_id,guest_name,requester_id' }
@@ -307,7 +430,7 @@ export async function submitClaimRequest(
     groupId: data.group_id,
     guestName: data.guest_name,
     requesterId: data.requester_id,
-    requesterName: data.requester_name || undefined,
+    requesterEmail: data.requester_email || undefined,
     status: data.status,
   }
 }
@@ -329,7 +452,7 @@ export async function getClaimRequests(groupId: string): Promise<ClaimRequest[]>
     groupId: d.group_id,
     guestName: d.guest_name,
     requesterId: d.requester_id,
-    requesterName: d.requester_name || undefined,
+    requesterEmail: d.requester_email || undefined,
     status: d.status,
   }))
 }
@@ -391,13 +514,17 @@ export async function approveClaimRequest(
     return false
   }
 
-  const isOwnerUser = await isGroupOwner(actingUserId, req.group_id)
-  if (!isOwnerUser) {
+  const isOwnerOrAdmin = await isGroupOwnerOrAdmin(actingUserId, req.group_id)
+  if (!isOwnerOrAdmin) {
     console.warn('Unauthorized claim approval attempt')
     return false
   }
 
-  const merged = await mergeGuestSessionsToUser(req.group_id, req.guest_name, req.requester_id, req.requester_name)
+  // Get user name from Clerk or use a default
+  // Note: We'll need to fetch this from the user's profile or use email as fallback
+  const userName = req.requester_email?.split('@')[0] || 'Member'
+  
+  const merged = await mergeGuestSessionsToUser(req.group_id, req.guest_name, req.requester_id, userName)
   if (!merged) return false
 
   // Add as group member if not already
@@ -412,9 +539,30 @@ export async function approveClaimRequest(
     await supabase.from('group_members').insert({
       group_id: req.group_id,
       user_id: req.requester_id,
-      user_name: req.requester_name || 'Member',
+      user_name: userName,
       role: 'member',
     })
+  }
+
+  // Remove the old guest member record for this name (if it exists)
+  const { error: guestMemberDeleteError } = await supabase
+    .from('group_members')
+    .delete()
+    .eq('group_id', req.group_id)
+    .ilike('user_name', req.guest_name)
+    .like('user_id', 'guest-%')
+
+  if (guestMemberDeleteError) {
+    console.error('Warning: failed to delete guest member after merge:', guestMemberDeleteError)
+    // Non-fatal – stats are already merged
+  }
+
+  // Clean up any remaining guest sessions that still match this guest name
+  // (only affects rows where user_id is null or a guest-* id)
+  const cleaned = await removeGuestFromGroupSessions(req.group_id, req.guest_name)
+  if (!cleaned) {
+    console.error('Warning: failed to clean up guest sessions after merge')
+    // Non-fatal – merged sessions are already owned by the user
   }
 
   await supabase
@@ -441,19 +589,20 @@ export async function denyClaimRequest(
     return false
   }
 
-  const isOwnerUser = await isGroupOwner(actingUserId, req.group_id)
-  if (!isOwnerUser) {
+  const isOwnerOrAdmin = await isGroupOwnerOrAdmin(actingUserId, req.group_id)
+  if (!isOwnerOrAdmin) {
     console.warn('Unauthorized claim denial attempt')
     return false
   }
 
+  // Delete the claim request instead of marking as denied
   const { error: delError } = await supabase
     .from('claim_requests')
-    .update({ status: 'denied' })
+    .delete()
     .eq('id', requestId)
 
   if (delError) {
-    console.error('Error denying claim request:', delError)
+    console.error('Error deleting claim request:', delError)
     return false
   }
 
@@ -700,7 +849,6 @@ export async function getGames(userId: string): Promise<Game[]> {
     notes: g.notes || undefined,
     createdBy: g.created_by,
     createdAt: g.created_at,
-    status: g.status as 'open' | 'in-progress' | 'completed',
     sessions: (g.game_sessions || []).map((s: any) => ({
       playerName: s.player_name,
       buyIn: parseFloat((s.buy_in ?? 0).toString()),
@@ -736,7 +884,6 @@ export async function getGamesByGroup(groupId: string): Promise<Game[]> {
     notes: g.notes || undefined,
     createdBy: g.created_by,
     createdAt: g.created_at,
-    status: g.status as 'open' | 'in-progress' | 'completed',
     sessions: (g.game_sessions || []).map((s: any) => ({
       playerName: s.player_name,
       buyIn: parseFloat((s.buy_in ?? 0).toString()),
@@ -772,7 +919,6 @@ export async function getGameById(gameId: string): Promise<Game | null> {
     notes: game.notes || undefined,
     createdBy: game.created_by,
     createdAt: game.created_at,
-    status: game.status as 'open' | 'in-progress' | 'completed',
     sessions: (game.game_sessions || []).map((s: any) => ({
       playerName: s.player_name,
       buyIn: parseFloat((s.buy_in ?? 0).toString()),
@@ -814,7 +960,6 @@ export async function getGamesByUser(userId: string): Promise<Game[]> {
       notes: g.notes || undefined,
       createdBy: g.created_by,
       createdAt: g.created_at,
-      status: g.status as 'open' | 'in-progress' | 'completed',
     sessions: (g.game_sessions || []).map((s: any) => ({
       playerName: s.player_name,
       buyIn: parseFloat((s.buy_in ?? 0).toString()),
@@ -831,8 +976,7 @@ export async function createGame(
   date: string,
   notes: string | undefined,
   userId: string,
-  userName: string,
-  status: 'open' | 'in-progress' | 'completed' = 'open'
+  userName: string
 ): Promise<Game | null> {
   const supabase = createClient()
   
@@ -845,7 +989,6 @@ export async function createGame(
       group_id: groupId,
       date,
       notes: notes || null,
-      status,
       created_by: userId,
     })
     .select()
@@ -887,23 +1030,6 @@ export async function updateGameSession(
   const allowedRoles: GameSession['role'][] = ['guest', 'member', 'bank', 'host', 'admin']
   const roleToUse = allowedRoles.includes(roleOverride as any) ? roleOverride : undefined
 
-  // Prevent edits to closed games
-  const { data: gameStatusRow, error: statusError } = await supabase
-    .from('games')
-    .select('status')
-    .eq('id', gameId)
-    .single()
-
-  if (statusError || !gameStatusRow) {
-    console.error('Error verifying game status:', statusError)
-    return false
-  }
-
-  if (gameStatusRow.status === 'completed') {
-    console.warn('Attempted to edit a completed game; aborting update.')
-    return false
-  }
-  
   // Check if session exists
   let existing: { id: string } | null = null
 
@@ -973,23 +1099,6 @@ export async function removeGameSession(
 ): Promise<boolean> {
   const supabase = createClient()
 
-  // Only allow removing from open or in-progress games
-  const { data: gameStatusRow, error: statusError } = await supabase
-    .from('games')
-    .select('status')
-    .eq('id', gameId)
-    .single()
-
-  if (statusError || !gameStatusRow) {
-    console.error('Error verifying game status before remove:', statusError)
-    return false
-  }
-
-  if (!['open', 'in-progress'].includes(gameStatusRow.status)) {
-    console.warn('Attempted to leave a non-open/non-in-progress game; aborting.')
-    return false
-  }
-
   const { error } = await supabase
     .from('game_sessions')
     .delete()
@@ -1014,7 +1123,7 @@ export async function removeGameParticipantAsAdmin(
   // Verify game and group ownership
   const { data: gameRow, error: fetchError } = await supabase
     .from('games')
-    .select('group_id, status, created_by')
+    .select('group_id, created_by')
     .eq('id', gameId)
     .single()
 
@@ -1023,14 +1132,9 @@ export async function removeGameParticipantAsAdmin(
     return false
   }
 
-  if (gameRow.status === 'completed') {
-    console.warn('Attempted to remove from a completed game; aborting.')
-    return false
-  }
-
-  const owner = await isGroupOwner(actingUserId, gameRow.group_id)
+  const ownerOrAdmin = await isGroupOwnerOrAdmin(actingUserId, gameRow.group_id)
   const isHost = gameRow.created_by === actingUserId
-  if (!owner && !isHost) {
+  if (!ownerOrAdmin && !isHost) {
     console.warn('Unauthorized game participant removal attempt.')
     return false
   }
@@ -1077,67 +1181,6 @@ export async function removeGuestFromGroupSessions(
 
   if (error) {
     console.error('Error deleting guest sessions:', error)
-    return false
-  }
-
-  return true
-}
-
-export async function updateGameStatus(
-  gameId: string,
-  status: 'open' | 'in-progress' | 'completed',
-  userId: string
-): Promise<boolean> {
-  const supabase = createClient()
-
-  // Ensure only the group owner can change status
-  const { data: gameRow, error: fetchError } = await supabase
-    .from('games')
-    .select('group_id')
-    .eq('id', gameId)
-    .single()
-
-  if (fetchError || !gameRow) {
-    console.error('Error verifying game owner:', fetchError)
-    return false
-  }
-
-  const groupId = gameRow.group_id
-
-  const { data: groupRow, error: groupError } = await supabase
-    .from('groups')
-    .select('created_by')
-    .eq('id', groupId)
-    .single()
-
-  if (groupError || !groupRow) {
-    console.error('Error verifying group owner:', groupError)
-    return false
-  }
-
-  const { data: memberRow } = await supabase
-    .from('group_members')
-    .select('role')
-    .eq('group_id', groupId)
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  const isGroupOwner =
-    groupRow.created_by === userId ||
-    (memberRow?.role === 'owner')
-
-  if (!isGroupOwner) {
-    console.warn('Unauthorized status update attempt.')
-    return false
-  }
-
-  const { error } = await supabase
-    .from('games')
-    .update({ status })
-    .eq('id', gameId)
-
-  if (error) {
-    console.error('Error updating game status:', error)
     return false
   }
 
@@ -1242,6 +1285,81 @@ export async function deleteGroup(groupId: string, userId: string): Promise<bool
   if (groupDeleteError) {
     console.error('Error deleting group:', groupDeleteError)
     return false
+  }
+
+  return true
+}
+
+// Update user's name across all groups
+export async function updateUserName(userId: string, newName: string): Promise<boolean> {
+  const supabase = createClient()
+  const trimmed = newName.trim()
+  
+  if (!trimmed || trimmed.length === 0) {
+    console.error('Name cannot be empty')
+    return false
+  }
+
+  const { error } = await supabase
+    .from('group_members')
+    .update({ user_name: trimmed })
+    .eq('user_id', userId)
+
+  if (error) {
+    console.error('Error updating user name:', error)
+    return false
+  }
+
+  return true
+}
+
+// Update user's name for a specific group
+export async function updateGroupMemberName(groupId: string, userId: string, newName: string, actingUserId: string): Promise<boolean> {
+  const supabase = createClient()
+  const trimmed = newName.trim()
+  
+  if (!trimmed || trimmed.length === 0) {
+    console.error('Name cannot be empty')
+    return false
+  }
+
+  // Users can only update their own name
+  if (userId !== actingUserId) {
+    console.warn('Unauthorized: users can only update their own name')
+    return false
+  }
+
+  // Update group_members table
+  const { error: memberError } = await supabase
+    .from('group_members')
+    .update({ user_name: trimmed })
+    .eq('group_id', groupId)
+    .eq('user_id', userId)
+
+  if (memberError) {
+    console.error('Error updating group member name:', memberError)
+    return false
+  }
+
+  // Also update all game_sessions for this user in this group to keep consistency
+  // Get game IDs first, then update sessions
+  const { data: games } = await supabase
+    .from('games')
+    .select('id')
+    .eq('group_id', groupId)
+
+  if (games && games.length > 0) {
+    const gameIds = games.map(g => g.id)
+    const { error: sessionUpdateError } = await supabase
+      .from('game_sessions')
+      .update({ player_name: trimmed })
+      .eq('user_id', userId)
+      .in('game_id', gameIds)
+
+    if (sessionUpdateError) {
+      console.error('Error updating game session names:', sessionUpdateError)
+      // Non-fatal - group member name is updated
+    }
   }
 
   return true

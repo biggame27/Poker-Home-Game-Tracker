@@ -13,7 +13,7 @@ import type { Game } from '@/types'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createGame, updateGameSession, updateGameStatus } from '@/lib/supabase/storage'
+import { createGame, updateGameSession } from '@/lib/supabase/storage'
 
 export default function Dashboard() {
   const { user, isLoaded } = useUser()
@@ -83,22 +83,13 @@ export default function Dashboard() {
             <OverallStats games={games} userId={user?.id} />
 
             {/* Quick Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <RunningTotalsChart 
-                games={games} 
-                cumulative={true}
-                title="Overall Running Total"
-                description="Cumulative profit/loss over time"
-                userId={user?.id}
-              />
-              <RunningTotalsChart 
-                games={games} 
-                cumulative={false}
-                title="Recent Game Totals"
-                description="Profit/loss per game date"
-                userId={user?.id}
-              />
-            </div>
+            <RunningTotalsChart 
+              games={games} 
+              cumulative={true}
+              title="Overall Running Total"
+              description="Cumulative profit/loss over time"
+              userId={user?.id}
+            />
 
             {/* Recent Games */}
             <Card>

@@ -70,20 +70,12 @@ export default function StatisticsPage() {
           <>
             <OverallStats games={filteredGames} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <RunningTotalsChart 
-                games={filteredGames} 
-                cumulative={false}
-                title="Running Totals by Date"
-                description="Profit/loss per game date"
-              />
-              <RunningTotalsChart 
-                games={filteredGames} 
-                cumulative={true}
-                title="Overall Running Total"
-                description="Cumulative profit/loss over time"
-              />
-            </div>
+            <RunningTotalsChart 
+              games={filteredGames} 
+              cumulative={true}
+              title="Overall Running Total"
+              description="Cumulative profit/loss over time"
+            />
           </>
         ) : (
           <div className="flex items-center justify-center h-[400px] text-center">

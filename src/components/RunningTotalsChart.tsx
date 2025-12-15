@@ -14,6 +14,7 @@ interface RunningTotalsChartProps {
   description?: string
   groupId?: string
   userId?: string
+  guestName?: string
 }
 
 const chartConfig = {
@@ -38,18 +39,27 @@ export function RunningTotalsChart({
   description = cumulative 
     ? 'Cumulative profit/loss over time' 
     : 'Profit/loss per game date',
-  userId
+  userId,
+  guestName
 }: RunningTotalsChartProps) {
   const chartData = useMemo(() => {
     if (!games || games.length === 0) {
       return []
     }
 
-    // Process games data into chart format, filtering by userId if provided
+    // Process games data into chart format, filtering by userId or guestName if provided
     const processed = games
       .flatMap(game => 
         game.sessions
-          ?.filter((session: GameSession) => !userId || session.userId === userId)
+          ?.filter((session: GameSession) => {
+            if (userId) {
+              return session.userId === userId
+            }
+            if (guestName) {
+              return !session.userId && session.playerName?.toLowerCase() === guestName.toLowerCase()
+            }
+            return true
+          })
           ?.map((session: GameSession) => ({
             date: new Date(game.date),
             profit: session.profit || (session.endAmount - session.buyIn)
@@ -84,40 +94,17 @@ export function RunningTotalsChart({
         total: Number(total.toFixed(2))
       }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-  }, [games, cumulative, userId])
+  }, [games, cumulative, userId, guestName])
 
-  const enhancedChartData = useMemo(() => {
-    if (chartData.length < 2) return chartData
 
-    const xs = chartData.map((_, idx) => idx)
-    const ys = chartData.map((point) => point.total)
-
-    const meanX = xs.reduce((sum, x) => sum + x, 0) / xs.length
-    const meanY = ys.reduce((sum, y) => sum + y, 0) / ys.length
-    const denominator = xs.reduce((sum, x) => sum + Math.pow(x - meanX, 2), 0)
-
-    if (denominator === 0) return chartData
-
-    const slope = xs.reduce((sum, x, idx) => sum + (x - meanX) * (ys[idx] - meanY), 0) / denominator
-    const intercept = meanY - slope * meanX
-
-    const trendValues = xs.map((x) => intercept + slope * x)
-    const residuals = ys.map((y, idx) => y - trendValues[idx])
-    const variance = residuals.reduce((sum, r) => sum + r * r, 0) / residuals.length
-    const stdDev = Math.sqrt(variance)
-
-    return chartData.map((point, idx) => {
-      const trend = Number(trendValues[idx].toFixed(2))
-      const upper = Number((trend + stdDev).toFixed(2))
-      const lower = Number((trend - stdDev).toFixed(2))
-
-      return {
-        ...point,
-        trend,
-        varianceRange: [lower, upper] as [number, number],
-      }
-    })
+  // Calculate final value to determine color
+  const finalValue = useMemo(() => {
+    if (chartData.length === 0) return 0
+    return chartData[chartData.length - 1]?.total || 0
   }, [chartData])
+
+  const isProfitable = finalValue >= 0
+  const lineColor = isProfitable ? '#16a34a' : '#dc2626' // green-600 : red-600
 
   if (chartData.length === 0) {
     return (
@@ -148,7 +135,7 @@ export function RunningTotalsChart({
         >
           <LineChart
             accessibilityLayer
-            data={enhancedChartData}
+            data={chartData}
             margin={{
               left: 12,
               right: 12,
@@ -176,53 +163,27 @@ export function RunningTotalsChart({
               tickFormatter={(value) => `$${value}`}
             />
             <ChartTooltip
+              shared={false}
+              trigger="hover"
               content={
                 <ChartTooltipContent
-                  formatter={(value, name) => {
-                    if (Array.isArray(value) && value.length === 2) {
-                      const [low, high] = value
-                      const lowNum = typeof low === 'number' ? low : Number(low)
-                      const highNum = typeof high === 'number' ? high : Number(high)
-                      return (
-                        <div className="flex w-full justify-between">
-                          <span className="text-muted-foreground">Variance</span>
-                          <span className="font-mono">${lowNum.toFixed(2)} to ${highNum.toFixed(2)}</span>
-                        </div>
-                      )
-                    }
+                  labelFormatter={(value) => {
+                    const date = new Date(value)
+                    return format(date, 'MMMM dd, yyyy')
+                  }}
+                  formatter={(value) => {
                     return `$${Number(value).toLocaleString()}`
                   }}
                 />
               }
             />
-            <Area
-              type="monotone"
-              dataKey="varianceRange"
-              name="variance"
-              isRange
-              stroke="none"
-              fill="var(--color-variance)"
-              fillOpacity={0.08}
-              activeDot={false}
-              dot={false}
-              isAnimationActive={false}
-            />
-            <Line
-              dataKey="trend"
-              name="trend"
-              type="monotone"
-              stroke="var(--color-trend)"
-              strokeWidth={1.5}
-              strokeDasharray="5 5"
-              dot={false}
-              isAnimationActive={false}
-            />
             <Line
               dataKey="total"
-              type="monotone"
-              stroke="var(--color-total)"
+              type="linear"
+              stroke={lineColor}
               strokeWidth={2}
-              dot={false}
+              dot={{ r: 4, fill: lineColor, strokeWidth: 2 }}
+              activeDot={{ r: 6, fill: lineColor, strokeWidth: 2 }}
             />
           </LineChart>
         </ChartContainer>

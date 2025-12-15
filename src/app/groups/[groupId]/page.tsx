@@ -1,16 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Leaderboard } from '@/components/Leaderboard'
 import { RunningTotalsChart } from '@/components/RunningTotalsChart'
 import { OverallStats } from '@/components/OverallStats'
-import { getGroupById, getGamesByGroup, deleteGame, deleteGroup, updateGroup, addGuestMember, removeGroupMember, removeGuestFromGroupSessions, getClaimRequests, submitClaimRequest, approveClaimRequest, denyClaimRequest } from '@/lib/supabase/storage'
+import { getGroupById, getGamesByGroup, deleteGame, deleteGroup, updateGroup, addGuestMember, removeGroupMember, removeGuestFromGroupSessions, getClaimRequests, submitClaimRequest, approveClaimRequest, denyClaimRequest, promoteToAdmin, demoteFromAdmin, updateGroupMemberName } from '@/lib/supabase/storage'
 import type { Group, Game } from '@/types'
-import { Users, PlusCircle, Copy, Check, X, Trash2, EllipsisVertical } from 'lucide-react'
+import { Users, PlusCircle, Copy, Check, X, Trash2, EllipsisVertical, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 
@@ -28,7 +29,25 @@ export default function GroupDetailPage() {
   const [deletingGroup, setDeletingGroup] = useState(false)
   const [groupMenuOpen, setGroupMenuOpen] = useState(false)
   const [addingGuest, setAddingGuest] = useState(false)
-  const [claimRequests, setClaimRequests] = useState<{ id: string; guestName: string; requesterId: string; requesterName?: string; status: 'pending' | 'approved' | 'denied' }[]>([])
+  const [claimRequests, setClaimRequests] = useState<{ id: string; guestName: string; requesterId: string; requesterEmail?: string; status: 'pending' | 'approved' }[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+  const [savingName, setSavingName] = useState(false)
+
+  // Pagination logic
+  const gamesPerPage = 5
+  const totalPages = useMemo(() => Math.ceil(games.length / gamesPerPage), [games.length])
+  
+  useEffect(() => {
+    if (games.length > 0 && currentPage > totalPages) {
+      setCurrentPage(1)
+    }
+  }, [games.length, currentPage, totalPages])
+
+  const startIndex = (currentPage - 1) * gamesPerPage
+  const endIndex = startIndex + gamesPerPage
+  const paginatedGames = games.slice(startIndex, endIndex)
 
   useEffect(() => {
     if (groupId) {
@@ -88,6 +107,8 @@ export default function GroupDetailPage() {
 
   const handleDeleteGroup = async () => {
     if (!group || !user?.id) return
+    setGroupMenuOpen(false)
+    
     const confirmed = typeof window === 'undefined'
       ? true
       : window.confirm('Delete this group and all its games? This cannot be undone.')
@@ -101,11 +122,11 @@ export default function GroupDetailPage() {
         router.push('/groups')
       } else {
         setNotification({ type: 'error', message: 'Failed to delete group. Please try again.' })
+        setDeletingGroup(false)
       }
     } catch (error) {
       console.error('Error deleting group:', error)
       setNotification({ type: 'error', message: 'An error occurred while deleting the group.' })
-    } finally {
       setDeletingGroup(false)
     }
   }
@@ -201,7 +222,8 @@ export default function GroupDetailPage() {
 
   const handleSubmitClaim = async (guestName: string) => {
     if (!group || !user?.id) return
-    const res = await submitClaimRequest(group.id, guestName, user.id, user.fullName || user.username || user.primaryEmailAddress?.emailAddress || 'Member')
+    const userEmail = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress || undefined
+    const res = await submitClaimRequest(group.id, guestName, user.id, userEmail)
     if (res) {
       setClaimRequests(prev => {
         const without = prev.filter(r => !(r.guestName.toLowerCase() === res.guestName.toLowerCase() && r.requesterId === res.requesterId))
@@ -227,9 +249,89 @@ export default function GroupDetailPage() {
     if (!user?.id) return
     const success = await denyClaimRequest(requestId, user.id)
     if (success) {
+      // Remove the denied claim from state immediately
+      setClaimRequests(prev => prev.filter(r => r.id !== requestId))
       await loadData()
     } else {
       setNotification({ type: 'error', message: 'Failed to deny claim.' })
+    }
+  }
+
+  const handlePromoteToAdmin = async (memberId: string) => {
+    if (!group || !user?.id) return
+    const success = await promoteToAdmin(group.id, memberId, user.id)
+    if (success) {
+      // Optimistically update the UI
+      setGroup(prev => prev ? {
+        ...prev,
+        members: prev.members.map(m => 
+          m.userId === memberId ? { ...m, role: 'admin' as const } : m
+        )
+      } : prev)
+      await loadData()
+    } else {
+      setNotification({ type: 'error', message: 'Failed to promote member.' })
+    }
+  }
+
+  const handleDemoteFromAdmin = async (memberId: string) => {
+    if (!group || !user?.id) return
+    const success = await demoteFromAdmin(group.id, memberId, user.id)
+    if (success) {
+      // Optimistically update the UI
+      setGroup(prev => prev ? {
+        ...prev,
+        members: prev.members.map(m => 
+          m.userId === memberId ? { ...m, role: 'member' as const } : m
+        )
+      } : prev)
+      await loadData()
+    } else {
+      setNotification({ type: 'error', message: 'Failed to demote admin.' })
+    }
+  }
+
+  const handleStartEditName = (memberId: string, currentName: string) => {
+    setEditingMemberId(memberId)
+    setEditingName(currentName)
+  }
+
+  const handleCancelEditName = () => {
+    setEditingMemberId(null)
+    setEditingName('')
+  }
+
+  const handleSaveName = async () => {
+    if (!group || !user?.id || !editingMemberId) return
+    
+    const trimmed = editingName.trim()
+    if (!trimmed || trimmed.length === 0) {
+      setNotification({ type: 'error', message: 'Name cannot be empty' })
+      return
+    }
+
+    setSavingName(true)
+    try {
+      const success = await updateGroupMemberName(group.id, editingMemberId, trimmed, user.id)
+      if (success) {
+        // Optimistically update the UI
+        setGroup(prev => prev ? {
+          ...prev,
+          members: prev.members.map(m => 
+            m.userId === editingMemberId ? { ...m, userName: trimmed } : m
+          )
+        } : prev)
+        await loadData()
+        setEditingMemberId(null)
+        setEditingName('')
+      } else {
+        setNotification({ type: 'error', message: 'Failed to update name. Please try again.' })
+      }
+    } catch (error) {
+      console.error('Error updating name:', error)
+      setNotification({ type: 'error', message: 'An error occurred while updating your name.' })
+    } finally {
+      setSavingName(false)
     }
   }
 
@@ -264,6 +366,8 @@ export default function GroupDetailPage() {
   }
 
   const isOwner = group.createdBy === user?.id
+  const isAdmin = group.members.some(m => m.userId === user?.id && m.role === 'admin')
+  const isOwnerOrAdmin = isOwner || isAdmin
   const isMember = group.members.some(m => m.userId === user?.id)
   const savedGuests = group.members.filter(m => m.userId?.startsWith('guest-'))
   const regularMembers = group.members.filter(m => !m.userId?.startsWith('guest-'))
@@ -361,8 +465,9 @@ export default function GroupDetailPage() {
                       </button>
                       <button
                         className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-muted"
-                        onClick={() => {
-                          setGroupMenuOpen(false)
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
                           handleDeleteGroup()
                         }}
                         disabled={deletingGroup}
@@ -442,7 +547,7 @@ export default function GroupDetailPage() {
             )}
           </CardHeader>
           <CardContent className="space-y-6">
-            {isOwner && claimRequests.filter(r => r.status === 'pending').length > 0 && (
+            {isOwnerOrAdmin && claimRequests.filter(r => r.status === 'pending').length > 0 && (
               <div className="rounded-lg border p-3 bg-muted/50 space-y-2">
                 <p className="text-sm font-semibold">Pending guest claims</p>
                 <div className="space-y-2">
@@ -450,7 +555,7 @@ export default function GroupDetailPage() {
                     <div key={r.id} className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
                       <div>
                         <p className="font-medium">{r.guestName}</p>
-                        <p className="text-xs text-muted-foreground">Requested by {r.requesterName || 'User'}</p>
+                        <p className="text-xs text-muted-foreground">Requested by {r.requesterEmail || 'User'}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button size="sm" variant="outline" onClick={() => handleDenyClaim(r.id)}>
@@ -470,37 +575,135 @@ export default function GroupDetailPage() {
               {regularMembers.length === 0 && (
                 <p className="text-sm text-muted-foreground">No members yet.</p>
               )}
-              {regularMembers.map((member) => (
-                <div
-                  key={member.userId}
-                  className="flex items-center justify-between p-3 border rounded-lg"
-                >
-                  <div>
-                    <p className="font-medium">{member.userName}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Joined {format(new Date(member.joinedAt), 'MMM dd, yyyy')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {member.role === 'owner' && (
-                      <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
-                        Owner
-                      </span>
+              {regularMembers.map((member) => {
+                const isCurrentUser = member.userId === user?.id
+                const isEditing = editingMemberId === member.userId
+                
+                return (
+                  <div
+                    key={member.userId}
+                    className="flex items-center justify-between p-3 border rounded-lg"
+                  >
+                    {isEditing ? (
+                      <div className="flex-1 flex items-center gap-2">
+                        <Input
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleSaveName()
+                            } else if (e.key === 'Escape') {
+                              handleCancelEditName()
+                            }
+                          }}
+                          disabled={savingName}
+                          className="flex-1"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleSaveName}
+                          disabled={savingName || !editingName.trim()}
+                        >
+                          {savingName ? 'Saving...' : 'Save'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleCancelEditName}
+                          disabled={savingName}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <Link href={`/groups/${groupId}/members/${member.userId}`} className="flex-1 hover:opacity-80 transition-opacity">
+                          <div>
+                            <p className="font-medium">{member.userName}</p>
+                            <p className="text-sm text-muted-foreground">
+                              Joined {format(new Date(member.joinedAt), 'MMM dd, yyyy')}
+                            </p>
+                          </div>
+                        </Link>
+                        <div className="flex items-center gap-2">
+                          {isCurrentUser && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                handleStartEditName(member.userId, member.userName)
+                              }}
+                              aria-label="Edit your name"
+                              className="h-8 w-8"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {member.role === 'owner' && (
+                            <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                              Owner
+                            </span>
+                          )}
+                          {member.role === 'admin' && (
+                            <span className="text-xs px-2 py-1 bg-blue-500/10 text-blue-600 rounded-full">
+                              Admin
+                            </span>
+                          )}
+                          {isOwner && member.role !== 'owner' && (
+                            <>
+                              {member.role === 'admin' ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    handleDemoteFromAdmin(member.userId)
+                                  }}
+                                  aria-label="Demote from admin"
+                                >
+                                  Demote
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    handlePromoteToAdmin(member.userId)
+                                  }}
+                                  aria-label="Promote to admin"
+                                >
+                                  Promote
+                                </Button>
+                              )}
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  handleKickMember(member.userId)
+                                }}
+                                aria-label="Remove member"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </>
                     )}
-                    {isOwner && member.role !== 'owner' && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleKickMember(member.userId)}
-                        aria-label="Remove member"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className="space-y-2">
@@ -518,13 +721,15 @@ export default function GroupDetailPage() {
                   key={guest.userId}
                   className="flex items-center justify-between p-3 border rounded-lg"
                 >
-                  <div>
-                    <p className="font-medium">{guest.userName}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Saved guest · Joined {format(new Date(guest.joinedAt), 'MMM dd, yyyy')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
+                  <Link href={`/groups/${groupId}/guests/${encodeURIComponent(guest.userName)}`} className="flex-1 hover:opacity-80 transition-opacity cursor-pointer">
+                    <div>
+                      <p className="font-medium">{guest.userName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Saved guest · Joined {format(new Date(guest.joinedAt), 'MMM dd, yyyy')}
+                      </p>
+                    </div>
+                  </Link>
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <span className="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200">
                       Guest
                     </span>
@@ -535,9 +740,6 @@ export default function GroupDetailPage() {
                         )
                         if (mine?.status === 'pending') {
                           return <span className="text-xs text-muted-foreground">Claim pending</span>
-                        }
-                        if (mine?.status === 'denied') {
-                          return <span className="text-xs text-destructive">Claim denied</span>
                         }
                         return (
                           <Button
@@ -555,7 +757,11 @@ export default function GroupDetailPage() {
                         size="icon"
                         variant="ghost"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => handleKickMember(guest.userId)}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleKickMember(guest.userId)
+                        }}
                         aria-label="Remove guest"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -569,11 +775,13 @@ export default function GroupDetailPage() {
                   key={`guest-${guest.userId || guest.name}`}
                   className="flex items-center justify-between p-3 border rounded-lg"
                 >
-                  <div>
-                    <p className="font-medium">{guest.name}</p>
-                    <p className="text-sm text-muted-foreground">Guest from games</p>
-                  </div>
-                  <div className="flex items-center gap-2">
+                  <Link href={`/groups/${groupId}/guests/${encodeURIComponent(guest.name)}`} className="flex-1 hover:opacity-80 transition-opacity cursor-pointer">
+                    <div>
+                      <p className="font-medium">{guest.name}</p>
+                      <p className="text-sm text-muted-foreground">Guest from games</p>
+                    </div>
+                  </Link>
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <span className="text-xs px-2 py-1 bg-muted text-muted-foreground rounded-full">
                       Guest
                     </span>
@@ -584,9 +792,6 @@ export default function GroupDetailPage() {
                         )
                         if (mine?.status === 'pending') {
                           return <span className="text-xs text-muted-foreground">Claim pending</span>
-                        }
-                        if (mine?.status === 'denied') {
-                          return <span className="text-xs text-destructive">Claim denied</span>
                         }
                         return (
                           <Button
@@ -604,7 +809,11 @@ export default function GroupDetailPage() {
                         size="icon"
                         variant="ghost"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => handleRemoveGuestFromGames(guest.name)}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleRemoveGuestFromGames(guest.name)
+                        }}
                         aria-label="Remove guest from games"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -635,8 +844,9 @@ export default function GroupDetailPage() {
           </CardHeader>
           <CardContent>
             {games.length > 0 ? (
-              <div className="space-y-3">
-                {games.map((game) => {
+              <>
+                <div className="space-y-3">
+                  {paginatedGames.map((game) => {
                   const playerCount = game.sessions.length
                   const totalSum = game.sessions.reduce((sum, s) => sum + (s.profit || 0), 0)
                   const isBalanced = Math.abs(totalSum) < 0.01 // Allow small floating point errors
@@ -654,11 +864,6 @@ export default function GroupDetailPage() {
                               {userJoined && (
                                 <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
                                   Joined
-                                </span>
-                              )}
-                              {game.status === 'open' && (
-                                <span className="text-xs px-2 py-1 bg-green-500/10 text-green-600 rounded-full">
-                                  Open
                                 </span>
                               )}
                             </div>
@@ -693,23 +898,94 @@ export default function GroupDetailPage() {
                                 )}
                               </Button>
                             )}
-                            {game.status === 'in-progress' && (
-                              <span className="text-xs px-2 py-1 bg-amber-500/10 text-amber-600 rounded-full">
-                                In Progress
-                              </span>
-                            )}
-                            {game.status === 'completed' && (
-                              <span className="text-xs px-2 py-1 bg-muted text-muted-foreground rounded-full">
-                                Closed
-                              </span>
-                            )}
                           </div>
                         </div>
                       </Link>
                     </div>
                   )
-                })}
-              </div>
+                  })}
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="gap-2"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const pages: (number | string)[] = []
+                        const maxVisible = 7
+                        
+                        if (totalPages <= maxVisible) {
+                          for (let i = 1; i <= totalPages; i++) {
+                            pages.push(i)
+                          }
+                        } else {
+                          pages.push(1)
+                          
+                          if (currentPage <= 3) {
+                            for (let i = 2; i <= 4; i++) {
+                              pages.push(i)
+                            }
+                            pages.push('...')
+                            pages.push(totalPages)
+                          } else if (currentPage >= totalPages - 2) {
+                            pages.push('...')
+                            for (let i = totalPages - 3; i <= totalPages; i++) {
+                              pages.push(i)
+                            }
+                          } else {
+                            pages.push('...')
+                            for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                              pages.push(i)
+                            }
+                            pages.push('...')
+                            pages.push(totalPages)
+                          }
+                        }
+                        
+                        return pages.map((page, idx) => {
+                          if (page === '...') {
+                            return (
+                              <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">
+                                ...
+                              </span>
+                            )
+                          }
+                          
+                          return (
+                            <Button
+                              key={page}
+                              variant={currentPage === page ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(page as number)}
+                              className="min-w-[2.5rem]"
+                            >
+                              {page}
+                            </Button>
+                          )
+                        })
+                      })()}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                      className="gap-2"
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <PlusCircle className="h-12 w-12 text-muted-foreground mb-4" />
@@ -731,26 +1007,17 @@ export default function GroupDetailPage() {
         {/* Statistics */}
         {games.length > 0 && (
           <>
-            <OverallStats games={games} userId={user?.id} />
+            <OverallStats games={games} userId={user?.id} totalGamesInGroup={games.length} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <RunningTotalsChart 
-                games={games} 
-                cumulative={false}
-                title="Running Totals by Date"
-                description="Profit/loss per game date"
-                userId={user?.id}
-              />
-              <RunningTotalsChart 
-                games={games} 
-                cumulative={true}
-                title="Overall Running Total"
-                description="Cumulative profit/loss over time"
-                userId={user?.id}
-              />
-            </div>
+            <RunningTotalsChart 
+              games={games} 
+              cumulative={true}
+              title="Overall Running Total"
+              description="Cumulative profit/loss over time"
+              userId={user?.id}
+            />
 
-            <Leaderboard games={games} />
+            <Leaderboard games={games} groupId={groupId} onNameUpdate={loadData} groupMembers={group?.members} />
           </>
         )}
       </div>

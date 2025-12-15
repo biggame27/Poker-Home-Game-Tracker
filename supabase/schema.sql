@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS group_members (
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL, -- Clerk user ID
   user_name TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('owner', 'member')),
+  role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member')),
   joined_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(group_id, user_id)
 );
@@ -39,7 +39,6 @@ CREATE TABLE IF NOT EXISTS games (
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
   date DATE NOT NULL,
   notes TEXT,
-  status TEXT NOT NULL CHECK (status IN ('open', 'in-progress', 'completed')) DEFAULT 'open',
   created_by TEXT NOT NULL, -- Clerk user ID
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -65,9 +64,10 @@ CREATE TABLE IF NOT EXISTS claim_requests (
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
   guest_name TEXT NOT NULL,
   requester_id TEXT NOT NULL, -- Clerk user ID
-  requester_name TEXT,
+  requester_email TEXT,
   status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'denied')) DEFAULT 'pending',
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(group_id, guest_name, requester_id) -- One claim request per group/guest/requester combination
 );
 
 -- Indexes for performance
@@ -165,6 +165,16 @@ CREATE POLICY "Users can join groups"
   ON group_members FOR INSERT
   WITH CHECK (true); -- We'll validate in application code
 
+-- Group members: Owners can update member roles
+CREATE POLICY "Owners can update group members"
+  ON group_members FOR UPDATE
+  USING (true); -- We'll validate ownership in application code
+
+-- Group members: Owners can delete members
+CREATE POLICY "Owners can delete group members"
+  ON group_members FOR DELETE
+  USING (true); -- We'll validate ownership in application code
+
 -- Games: Can read games in their groups
 CREATE POLICY "Members can read games"
   ON games FOR SELECT
@@ -191,6 +201,24 @@ CREATE POLICY "Users can manage sessions"
   ON game_sessions FOR ALL
   USING (true) -- We'll validate in application code
   WITH CHECK (true);
+
+-- Groups: Owners can delete their groups
+CREATE POLICY "Owners can delete their groups"
+  ON groups FOR DELETE
+  USING (true); -- We'll validate ownership in application code
+
+-- Games: Can delete games
+CREATE POLICY "Can delete games"
+  ON games FOR DELETE
+  USING (true); -- We'll validate in application code
+
+-- Group members: Can delete members
+CREATE POLICY "Can delete group members"
+  ON group_members FOR DELETE
+  USING (true); -- We'll validate in application code
+
+
+
 
 
 

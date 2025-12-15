@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { GroupSelector } from '@/components/GroupSelector'
-import { createGame, getOrCreatePersonalGroup, updateGameSession, updateGameStatus } from '@/lib/supabase/storage'
+import { createGame, getOrCreatePersonalGroup, updateGameSession } from '@/lib/supabase/storage'
 import type { Game, GameSession } from '@/types'
 import { toast } from '@/lib/toast'
 
@@ -114,12 +114,6 @@ export function SimpleGameForm({ defaultGroupId, onSuccess, gameType = 'group' }
         if (!success) {
           toast.error('Failed to update game session. Please try again.')
           return
-        }
-        
-        // Mark personal game as completed
-        const statusSuccess = await updateGameStatus(game.id, 'completed', user.id)
-        if (!statusSuccess) {
-          console.warn('Failed to mark personal game as completed, but game was created successfully')
         }
       }
       
