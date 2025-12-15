@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,7 +10,7 @@ import { RunningTotalsChart } from '@/components/RunningTotalsChart'
 import { OverallStats } from '@/components/OverallStats'
 import { getGroupById, getGamesByGroup, deleteGame, deleteGroup, updateGroup, addGuestMember, removeGroupMember, removeGuestFromGroupSessions, getClaimRequests, submitClaimRequest, approveClaimRequest, denyClaimRequest, promoteToAdmin, demoteFromAdmin } from '@/lib/supabase/storage'
 import type { Group, Game } from '@/types'
-import { Users, PlusCircle, Copy, Check, X, Trash2, EllipsisVertical } from 'lucide-react'
+import { Users, PlusCircle, Copy, Check, X, Trash2, EllipsisVertical, ChevronLeft, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 
@@ -29,6 +29,21 @@ export default function GroupDetailPage() {
   const [groupMenuOpen, setGroupMenuOpen] = useState(false)
   const [addingGuest, setAddingGuest] = useState(false)
   const [claimRequests, setClaimRequests] = useState<{ id: string; guestName: string; requesterId: string; requesterEmail?: string; status: 'pending' | 'approved' }[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+
+  // Pagination logic
+  const gamesPerPage = 5
+  const totalPages = useMemo(() => Math.ceil(games.length / gamesPerPage), [games.length])
+  
+  useEffect(() => {
+    if (games.length > 0 && currentPage > totalPages) {
+      setCurrentPage(1)
+    }
+  }, [games.length, currentPage, totalPages])
+
+  const startIndex = (currentPage - 1) * gamesPerPage
+  const endIndex = startIndex + gamesPerPage
+  const paginatedGames = games.slice(startIndex, endIndex)
 
   useEffect(() => {
     if (groupId) {
@@ -517,12 +532,14 @@ export default function GroupDetailPage() {
                   key={member.userId}
                   className="flex items-center justify-between p-3 border rounded-lg"
                 >
-                  <div>
-                    <p className="font-medium">{member.userName}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Joined {format(new Date(member.joinedAt), 'MMM dd, yyyy')}
-                    </p>
-                  </div>
+                  <Link href={`/groups/${groupId}/members/${member.userId}`} className="flex-1 hover:opacity-80 transition-opacity">
+                    <div>
+                      <p className="font-medium">{member.userName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Joined {format(new Date(member.joinedAt), 'MMM dd, yyyy')}
+                      </p>
+                    </div>
+                  </Link>
                   <div className="flex items-center gap-2">
                     {member.role === 'owner' && (
                       <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
@@ -569,7 +586,11 @@ export default function GroupDetailPage() {
                           size="icon"
                           variant="ghost"
                           className="text-destructive hover:text-destructive"
-                          onClick={() => handleKickMember(member.userId)}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            handleKickMember(member.userId)
+                          }}
                           aria-label="Remove member"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -596,13 +617,15 @@ export default function GroupDetailPage() {
                   key={guest.userId}
                   className="flex items-center justify-between p-3 border rounded-lg"
                 >
-                  <div>
-                    <p className="font-medium">{guest.userName}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Saved guest · Joined {format(new Date(guest.joinedAt), 'MMM dd, yyyy')}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
+                  <Link href={`/groups/${groupId}/guests/${encodeURIComponent(guest.userName)}`} className="flex-1 hover:opacity-80 transition-opacity cursor-pointer">
+                    <div>
+                      <p className="font-medium">{guest.userName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Saved guest · Joined {format(new Date(guest.joinedAt), 'MMM dd, yyyy')}
+                      </p>
+                    </div>
+                  </Link>
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <span className="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-200">
                       Guest
                     </span>
@@ -630,7 +653,11 @@ export default function GroupDetailPage() {
                         size="icon"
                         variant="ghost"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => handleKickMember(guest.userId)}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleKickMember(guest.userId)
+                        }}
                         aria-label="Remove guest"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -644,11 +671,13 @@ export default function GroupDetailPage() {
                   key={`guest-${guest.userId || guest.name}`}
                   className="flex items-center justify-between p-3 border rounded-lg"
                 >
-                  <div>
-                    <p className="font-medium">{guest.name}</p>
-                    <p className="text-sm text-muted-foreground">Guest from games</p>
-                  </div>
-                  <div className="flex items-center gap-2">
+                  <Link href={`/groups/${groupId}/guests/${encodeURIComponent(guest.name)}`} className="flex-1 hover:opacity-80 transition-opacity cursor-pointer">
+                    <div>
+                      <p className="font-medium">{guest.name}</p>
+                      <p className="text-sm text-muted-foreground">Guest from games</p>
+                    </div>
+                  </Link>
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     <span className="text-xs px-2 py-1 bg-muted text-muted-foreground rounded-full">
                       Guest
                     </span>
@@ -676,7 +705,11 @@ export default function GroupDetailPage() {
                         size="icon"
                         variant="ghost"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => handleRemoveGuestFromGames(guest.name)}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleRemoveGuestFromGames(guest.name)
+                        }}
                         aria-label="Remove guest from games"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -707,8 +740,9 @@ export default function GroupDetailPage() {
           </CardHeader>
           <CardContent>
             {games.length > 0 ? (
-              <div className="space-y-3">
-                {games.map((game) => {
+              <>
+                <div className="space-y-3">
+                  {paginatedGames.map((game) => {
                   const playerCount = game.sessions.length
                   const totalSum = game.sessions.reduce((sum, s) => sum + (s.profit || 0), 0)
                   const isBalanced = Math.abs(totalSum) < 0.01 // Allow small floating point errors
@@ -765,8 +799,89 @@ export default function GroupDetailPage() {
                       </Link>
                     </div>
                   )
-                })}
-              </div>
+                  })}
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="gap-2"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const pages: (number | string)[] = []
+                        const maxVisible = 7
+                        
+                        if (totalPages <= maxVisible) {
+                          for (let i = 1; i <= totalPages; i++) {
+                            pages.push(i)
+                          }
+                        } else {
+                          pages.push(1)
+                          
+                          if (currentPage <= 3) {
+                            for (let i = 2; i <= 4; i++) {
+                              pages.push(i)
+                            }
+                            pages.push('...')
+                            pages.push(totalPages)
+                          } else if (currentPage >= totalPages - 2) {
+                            pages.push('...')
+                            for (let i = totalPages - 3; i <= totalPages; i++) {
+                              pages.push(i)
+                            }
+                          } else {
+                            pages.push('...')
+                            for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                              pages.push(i)
+                            }
+                            pages.push('...')
+                            pages.push(totalPages)
+                          }
+                        }
+                        
+                        return pages.map((page, idx) => {
+                          if (page === '...') {
+                            return (
+                              <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">
+                                ...
+                              </span>
+                            )
+                          }
+                          
+                          return (
+                            <Button
+                              key={page}
+                              variant={currentPage === page ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(page as number)}
+                              className="min-w-[2.5rem]"
+                            >
+                              {page}
+                            </Button>
+                          )
+                        })
+                      })()}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                      className="gap-2"
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <PlusCircle className="h-12 w-12 text-muted-foreground mb-4" />
@@ -788,24 +903,15 @@ export default function GroupDetailPage() {
         {/* Statistics */}
         {games.length > 0 && (
           <>
-            <OverallStats games={games} userId={user?.id} />
+            <OverallStats games={games} userId={user?.id} totalGamesInGroup={games.length} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <RunningTotalsChart 
-                games={games} 
-                cumulative={false}
-                title="Running Totals by Date"
-                description="Profit/loss per game date"
-                userId={user?.id}
-              />
-              <RunningTotalsChart 
-                games={games} 
-                cumulative={true}
-                title="Overall Running Total"
-                description="Cumulative profit/loss over time"
-                userId={user?.id}
-              />
-            </div>
+            <RunningTotalsChart 
+              games={games} 
+              cumulative={true}
+              title="Overall Running Total"
+              description="Cumulative profit/loss over time"
+              userId={user?.id}
+            />
 
             <Leaderboard games={games} />
           </>

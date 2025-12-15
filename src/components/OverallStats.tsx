@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { TrendingUp, TrendingDown, DollarSign, Calendar } from 'lucide-react'
 import type { Game, GameSession } from '@/types'
 
-export function OverallStats({ games, groupId, userId }: { games: Game[]; groupId?: string; userId?: string }) {
+export function OverallStats({ games, groupId, userId, totalGamesInGroup }: { games: Game[]; groupId?: string; userId?: string; totalGamesInGroup?: number }) {
   const stats = useMemo(() => {
     // Filter games to only include sessions from the current user if userId is provided
     const filteredGames = userId 
@@ -15,7 +15,8 @@ export function OverallStats({ games, groupId, userId }: { games: Game[]; groupI
         })).filter(game => game.sessions.length > 0)
       : games
 
-    const totalGames = filteredGames.length
+    const gamesPlayed = filteredGames.length
+    const totalGames = totalGamesInGroup ?? games.length
     const totalBuyIns = filteredGames.reduce((sum, game) => 
       sum + (game.sessions?.reduce((s: number, sess: GameSession) => 
         s + (sess.buyIn || 0), 0) || 0), 0
@@ -25,23 +26,24 @@ export function OverallStats({ games, groupId, userId }: { games: Game[]; groupI
         s + (sess.endAmount || 0), 0) || 0), 0
     )
     const totalProfit = totalEndAmounts - totalBuyIns
-    const avgProfitPerGame = totalGames > 0 ? totalProfit / totalGames : 0
+    const avgProfitPerGame = gamesPlayed > 0 ? totalProfit / gamesPlayed : 0
 
     return { 
+      gamesPlayed,
       totalGames, 
       totalBuyIns, 
       totalEndAmounts, 
       totalProfit,
       avgProfitPerGame
     }
-  }, [games, userId])
+  }, [games, userId, totalGamesInGroup])
 
   const statCards = [
     {
-      title: 'Total Games',
-      value: stats.totalGames,
+      title: 'Total Games Played',
+      value: totalGamesInGroup !== undefined ? `${stats.gamesPlayed}/${stats.totalGames}` : stats.gamesPlayed,
       icon: Calendar,
-      description: 'Games tracked'
+      description: totalGamesInGroup !== undefined ? 'Games played / Total games' : 'Games tracked'
     },
     {
       title: 'Total Buy-Ins',

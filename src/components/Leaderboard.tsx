@@ -3,7 +3,7 @@
 import { useMemo, type ReactElement } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Trophy, TrendingUp, TrendingDown } from 'lucide-react'
+import { Trophy } from 'lucide-react'
 import type { Game, GameSession, PlayerStats } from '@/types'
 
 type LeaderboardItem = PlayerStats & {
@@ -12,6 +12,7 @@ type LeaderboardItem = PlayerStats & {
 }
 
 export function Leaderboard({ games, hideCard = false, groupId, userId, singleGame = false }: { games: Game[]; hideCard?: boolean; groupId?: string; userId?: string; singleGame?: boolean }): ReactElement {
+
   const leaderboard = useMemo((): LeaderboardItem[] => {
     // For single game view, just show the sessions directly
     if (singleGame && games.length === 1) {
@@ -19,9 +20,10 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
       return game.sessions
         .map((session: GameSession) => {
           const profit = session.profit || (session.endAmount - session.buyIn)
+          const displayName = (session.playerName || 'Unknown').toString()
           return {
-            name: session.playerName || 'Unknown',
-            userId: session.userId,
+            name: displayName,
+            userId: session.userId || undefined,
             totalProfit: profit,
             buyIn: session.buyIn || 0,
             endAmount: session.endAmount || 0,
@@ -44,18 +46,18 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
           return
         }
         
-        const playerName = session.playerName || 'Unknown'
+        const displayName = (session.playerName || 'Unknown').toString()
         const profit = session.profit || (session.endAmount - session.buyIn)
         const buyIn = session.buyIn || 0
         const endAmount = session.endAmount || 0
         
         // Use userId as key if available, otherwise use name
-        const key = session.userId || playerName
+        const key = session.userId || displayName
         
         if (!playerStats.has(key)) {
           playerStats.set(key, {
-            name: playerName,
-            userId: session.userId,
+            name: displayName,
+            userId: session.userId || undefined,
             totalProfit: 0,
             gamesPlayed: 0,
             totalBuyIns: 0,
@@ -96,27 +98,15 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
             <TableRow>
               <TableHead className="w-16">Rank</TableHead>
               <TableHead>Player</TableHead>
-              <TableHead className="text-right">Profit/Loss</TableHead>
-              {singleGame ? (
-                <>
-                  <TableHead className="text-right">Buy-In</TableHead>
-                  <TableHead className="text-right">End Amount</TableHead>
-                </>
-              ) : (
-                <>
-                  <TableHead className="text-right">Games Played</TableHead>
-                  <TableHead className="text-right">Total Buy-Ins</TableHead>
-                  <TableHead className="text-right">Avg Profit/Game</TableHead>
-                </>
-              )}
+              <TableHead className="text-right">Sessions Played</TableHead>
+              <TableHead className="text-right">Total Buy-Ins</TableHead>
+              <TableHead className="text-right">Total Profit</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {leaderboard.map((player, index) => {
-              const avgProfit = !singleGame && player.gamesPlayed > 0 
-                ? player.totalProfit / player.gamesPlayed 
-                : 0
-              const key = player.userId ? `user-${player.userId}` : `name-${player.name}-${index}`
+              const key = player.userId ? `user-${player.userId}` : `name-${(player.name || 'Unknown').toString()}-${index}`
+              const displayName = (player.name || 'Unknown').toString()
               
               return (
                 <TableRow key={key}>
@@ -125,35 +115,12 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
                       {getRankIcon(index)}
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium">{player.name}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {player.totalProfit >= 0 ? (
-                        <TrendingUp className="h-4 w-4 text-green-600" />
-                      ) : (
-                        <TrendingDown className="h-4 w-4 text-red-600" />
-                      )}
-                      <span className={player.totalProfit >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
-                        ${player.totalProfit.toFixed(2)}
-                      </span>
-                    </div>
+                  <TableCell className="font-medium">{displayName}</TableCell>
+                  <TableCell className="text-right">{player.gamesPlayed || 0}</TableCell>
+                  <TableCell className="text-right">${(player.totalBuyIns || 0).toFixed(2)}</TableCell>
+                  <TableCell className={`text-right font-semibold ${(player.totalProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    ${(player.totalProfit || 0) >= 0 ? '+' : ''}{(player.totalProfit || 0).toFixed(2)}
                   </TableCell>
-                  {singleGame ? (
-                    <>
-                      <TableCell className="text-right">${(player.buyIn ?? 0).toFixed(2)}</TableCell>
-                      <TableCell className="text-right">${(player.endAmount ?? 0).toFixed(2)}</TableCell>
-                    </>
-                  ) : (
-                    <>
-                      <TableCell className="text-right">{player.gamesPlayed}</TableCell>
-                      <TableCell className="text-right">${player.totalBuyIns.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">
-                        <span className={avgProfit >= 0 ? 'text-green-600' : 'text-red-600'}>
-                          ${avgProfit.toFixed(2)}
-                        </span>
-                      </TableCell>
-                    </>
-                  )}
                 </TableRow>
               )
             })}

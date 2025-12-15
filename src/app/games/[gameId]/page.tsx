@@ -372,26 +372,26 @@ function GameDetailContent() {
       <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
         {/* Header */}
         <div className="space-y-4">
-          {from && (
+          {(from || group) && (
             <div className="flex items-center gap-4">
               <Button 
                 variant="ghost" 
                 size="sm" 
                 className="gap-2"
                 onClick={() => {
-                  if (from === 'group' && groupId) {
+                  if (group) {
+                    router.push(`/groups/${group.id}`)
+                  } else if (from === 'group' && groupId) {
                     router.push(`/groups/${groupId}`)
                   } else if (from === 'dashboard') {
                     router.push('/')
-                  } else if (group) {
-                    router.push(`/groups/${group.id}`)
                   } else {
                     router.push('/')
                   }
                 }}
               >
                 <ArrowLeft className="h-4 w-4" />
-                Back
+                Back to Group
               </Button>
             </div>
           )}
@@ -402,9 +402,12 @@ function GameDetailContent() {
                 Game - {format(new Date(game.date), 'MMMM dd, yyyy')}
               </h1>
               {group && (
-                <p className="text-muted-foreground">
-                  Group: {group.name}
-                </p>
+                <Link href={`/groups/${group.id}`}>
+                  <p className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer inline-flex items-center gap-1">
+                    <ArrowLeft className="h-3 w-3" />
+                    Group: {group.name}
+                  </p>
+                </Link>
               )}
               {game.notes && (
                 <p className="text-muted-foreground">{game.notes}</p>
