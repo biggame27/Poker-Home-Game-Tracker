@@ -179,6 +179,24 @@ CREATE POLICY "Users can manage sessions"
   USING (true) -- We'll validate in application code
   WITH CHECK (true);
 
+-- Groups: Owners can delete their groups
+CREATE POLICY "Owners can delete their groups"
+  ON groups FOR DELETE
+  USING (true); -- We'll validate ownership in application code
+
+-- Games: Can delete games
+CREATE POLICY "Can delete games"
+  ON games FOR DELETE
+  USING (true); -- We'll validate in application code
+
+-- Group members: Can delete members
+CREATE POLICY "Can delete group members"
+  ON group_members FOR DELETE
+  USING (true); -- We'll validate in application code
+
+
+
+
 
 
 

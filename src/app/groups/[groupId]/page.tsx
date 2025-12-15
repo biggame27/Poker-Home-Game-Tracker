@@ -84,6 +84,8 @@ export default function GroupDetailPage() {
 
   const handleDeleteGroup = async () => {
     if (!group || !user?.id) return
+    setGroupMenuOpen(false)
+    
     const confirmed = typeof window === 'undefined'
       ? true
       : window.confirm('Delete this group and all its games? This cannot be undone.')
@@ -97,11 +99,11 @@ export default function GroupDetailPage() {
         router.push('/groups')
       } else {
         setNotification({ type: 'error', message: 'Failed to delete group. Please try again.' })
+        setDeletingGroup(false)
       }
     } catch (error) {
       console.error('Error deleting group:', error)
       setNotification({ type: 'error', message: 'An error occurred while deleting the group.' })
-    } finally {
       setDeletingGroup(false)
     }
   }
@@ -241,8 +243,9 @@ export default function GroupDetailPage() {
                       </button>
                       <button
                         className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-muted"
-                        onClick={() => {
-                          setGroupMenuOpen(false)
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
                           handleDeleteGroup()
                         }}
                         disabled={deletingGroup}
