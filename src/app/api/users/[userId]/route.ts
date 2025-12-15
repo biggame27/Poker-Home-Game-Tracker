@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClerkClient } from '@clerk/nextjs/server'
+import { clerkClient } from '@clerk/nextjs/server'
 
 export async function GET(
   request: NextRequest,
@@ -18,8 +18,7 @@ export async function GET(
 
     console.log('Fetching user:', userId)
     
-    // Create Clerk client instance
-    const clerkClient = createClerkClient()
+    // Use Clerk client instance
     const user = await clerkClient.users.getUser(userId)
     
     // Get first and last name from Clerk user object
