@@ -640,13 +640,15 @@ function GameDetailContent() {
               onAddMember={canAdminEdit ? handleOpenAddMember : undefined}
               canKick={canKick}
               onKickParticipant={(userId, playerName) => handleKickParticipant(userId, playerName)}
+              groupId={group?.id}
+              onNameUpdate={refreshGame}
             />
           </div>
         )}
 
         {/* Leaderboard */}
         {game.sessions.length > 0 && (
-          <Leaderboard games={[game]} singleGame={true} />
+          <Leaderboard games={[game]} singleGame={true} groupId={group?.id} onNameUpdate={refreshGame} groupMembers={group?.members} />
         )}
       </div>
 

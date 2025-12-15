@@ -5,12 +5,13 @@ import { useParams, useRouter } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Leaderboard } from '@/components/Leaderboard'
 import { RunningTotalsChart } from '@/components/RunningTotalsChart'
 import { OverallStats } from '@/components/OverallStats'
-import { getGroupById, getGamesByGroup, deleteGame, deleteGroup, updateGroup, addGuestMember, removeGroupMember, removeGuestFromGroupSessions, getClaimRequests, submitClaimRequest, approveClaimRequest, denyClaimRequest, promoteToAdmin, demoteFromAdmin } from '@/lib/supabase/storage'
+import { getGroupById, getGamesByGroup, deleteGame, deleteGroup, updateGroup, addGuestMember, removeGroupMember, removeGuestFromGroupSessions, getClaimRequests, submitClaimRequest, approveClaimRequest, denyClaimRequest, promoteToAdmin, demoteFromAdmin, updateGroupMemberName } from '@/lib/supabase/storage'
 import type { Group, Game } from '@/types'
-import { Users, PlusCircle, Copy, Check, X, Trash2, EllipsisVertical, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Users, PlusCircle, Copy, Check, X, Trash2, EllipsisVertical, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 
@@ -30,6 +31,9 @@ export default function GroupDetailPage() {
   const [addingGuest, setAddingGuest] = useState(false)
   const [claimRequests, setClaimRequests] = useState<{ id: string; guestName: string; requesterId: string; requesterEmail?: string; status: 'pending' | 'approved' }[]>([])
   const [currentPage, setCurrentPage] = useState(1)
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+  const [savingName, setSavingName] = useState(false)
 
   // Pagination logic
   const gamesPerPage = 5
@@ -287,6 +291,50 @@ export default function GroupDetailPage() {
     }
   }
 
+  const handleStartEditName = (memberId: string, currentName: string) => {
+    setEditingMemberId(memberId)
+    setEditingName(currentName)
+  }
+
+  const handleCancelEditName = () => {
+    setEditingMemberId(null)
+    setEditingName('')
+  }
+
+  const handleSaveName = async () => {
+    if (!group || !user?.id || !editingMemberId) return
+    
+    const trimmed = editingName.trim()
+    if (!trimmed || trimmed.length === 0) {
+      setNotification({ type: 'error', message: 'Name cannot be empty' })
+      return
+    }
+
+    setSavingName(true)
+    try {
+      const success = await updateGroupMemberName(group.id, editingMemberId, trimmed, user.id)
+      if (success) {
+        // Optimistically update the UI
+        setGroup(prev => prev ? {
+          ...prev,
+          members: prev.members.map(m => 
+            m.userId === editingMemberId ? { ...m, userName: trimmed } : m
+          )
+        } : prev)
+        await loadData()
+        setEditingMemberId(null)
+        setEditingName('')
+      } else {
+        setNotification({ type: 'error', message: 'Failed to update name. Please try again.' })
+      }
+    } catch (error) {
+      console.error('Error updating name:', error)
+      setNotification({ type: 'error', message: 'An error occurred while updating your name.' })
+    } finally {
+      setSavingName(false)
+    }
+  }
+
   if (!isLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -527,79 +575,135 @@ export default function GroupDetailPage() {
               {regularMembers.length === 0 && (
                 <p className="text-sm text-muted-foreground">No members yet.</p>
               )}
-              {regularMembers.map((member) => (
-                <div
-                  key={member.userId}
-                  className="flex items-center justify-between p-3 border rounded-lg"
-                >
-                  <Link href={`/groups/${groupId}/members/${member.userId}`} className="flex-1 hover:opacity-80 transition-opacity">
-                    <div>
-                      <p className="font-medium">{member.userName}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Joined {format(new Date(member.joinedAt), 'MMM dd, yyyy')}
-                      </p>
-                    </div>
-                  </Link>
-                  <div className="flex items-center gap-2">
-                    {member.role === 'owner' && (
-                      <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
-                        Owner
-                      </span>
-                    )}
-                    {member.role === 'admin' && (
-                      <span className="text-xs px-2 py-1 bg-blue-500/10 text-blue-600 rounded-full">
-                        Admin
-                      </span>
-                    )}
-                    {isOwner && member.role !== 'owner' && (
-                      <>
-                        {member.role === 'admin' ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              handleDemoteFromAdmin(member.userId)
-                            }}
-                            aria-label="Demote from admin"
-                          >
-                            Demote
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              handlePromoteToAdmin(member.userId)
-                            }}
-                            aria-label="Promote to admin"
-                          >
-                            Promote
-                          </Button>
-                        )}
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            handleKickMember(member.userId)
+              {regularMembers.map((member) => {
+                const isCurrentUser = member.userId === user?.id
+                const isEditing = editingMemberId === member.userId
+                
+                return (
+                  <div
+                    key={member.userId}
+                    className="flex items-center justify-between p-3 border rounded-lg"
+                  >
+                    {isEditing ? (
+                      <div className="flex-1 flex items-center gap-2">
+                        <Input
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleSaveName()
+                            } else if (e.key === 'Escape') {
+                              handleCancelEditName()
+                            }
                           }}
-                          aria-label="Remove member"
+                          disabled={savingName}
+                          className="flex-1"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleSaveName}
+                          disabled={savingName || !editingName.trim()}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          {savingName ? 'Saving...' : 'Save'}
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleCancelEditName}
+                          disabled={savingName}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <Link href={`/groups/${groupId}/members/${member.userId}`} className="flex-1 hover:opacity-80 transition-opacity">
+                          <div>
+                            <p className="font-medium">{member.userName}</p>
+                            <p className="text-sm text-muted-foreground">
+                              Joined {format(new Date(member.joinedAt), 'MMM dd, yyyy')}
+                            </p>
+                          </div>
+                        </Link>
+                        <div className="flex items-center gap-2">
+                          {isCurrentUser && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                handleStartEditName(member.userId, member.userName)
+                              }}
+                              aria-label="Edit your name"
+                              className="h-8 w-8"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {member.role === 'owner' && (
+                            <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                              Owner
+                            </span>
+                          )}
+                          {member.role === 'admin' && (
+                            <span className="text-xs px-2 py-1 bg-blue-500/10 text-blue-600 rounded-full">
+                              Admin
+                            </span>
+                          )}
+                          {isOwner && member.role !== 'owner' && (
+                            <>
+                              {member.role === 'admin' ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    handleDemoteFromAdmin(member.userId)
+                                  }}
+                                  aria-label="Demote from admin"
+                                >
+                                  Demote
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    handlePromoteToAdmin(member.userId)
+                                  }}
+                                  aria-label="Promote to admin"
+                                >
+                                  Promote
+                                </Button>
+                              )}
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="text-destructive hover:text-destructive"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  handleKickMember(member.userId)
+                                }}
+                                aria-label="Remove member"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </>
                     )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <div className="space-y-2">
@@ -913,7 +1017,7 @@ export default function GroupDetailPage() {
               userId={user?.id}
             />
 
-            <Leaderboard games={games} />
+            <Leaderboard games={games} groupId={groupId} onNameUpdate={loadData} groupMembers={group?.members} />
           </>
         )}
       </div>

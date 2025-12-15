@@ -1290,3 +1290,78 @@ export async function deleteGroup(groupId: string, userId: string): Promise<bool
   return true
 }
 
+// Update user's name across all groups
+export async function updateUserName(userId: string, newName: string): Promise<boolean> {
+  const supabase = createClient()
+  const trimmed = newName.trim()
+  
+  if (!trimmed || trimmed.length === 0) {
+    console.error('Name cannot be empty')
+    return false
+  }
+
+  const { error } = await supabase
+    .from('group_members')
+    .update({ user_name: trimmed })
+    .eq('user_id', userId)
+
+  if (error) {
+    console.error('Error updating user name:', error)
+    return false
+  }
+
+  return true
+}
+
+// Update user's name for a specific group
+export async function updateGroupMemberName(groupId: string, userId: string, newName: string, actingUserId: string): Promise<boolean> {
+  const supabase = createClient()
+  const trimmed = newName.trim()
+  
+  if (!trimmed || trimmed.length === 0) {
+    console.error('Name cannot be empty')
+    return false
+  }
+
+  // Users can only update their own name
+  if (userId !== actingUserId) {
+    console.warn('Unauthorized: users can only update their own name')
+    return false
+  }
+
+  // Update group_members table
+  const { error: memberError } = await supabase
+    .from('group_members')
+    .update({ user_name: trimmed })
+    .eq('group_id', groupId)
+    .eq('user_id', userId)
+
+  if (memberError) {
+    console.error('Error updating group member name:', memberError)
+    return false
+  }
+
+  // Also update all game_sessions for this user in this group to keep consistency
+  // Get game IDs first, then update sessions
+  const { data: games } = await supabase
+    .from('games')
+    .select('id')
+    .eq('group_id', groupId)
+
+  if (games && games.length > 0) {
+    const gameIds = games.map(g => g.id)
+    const { error: sessionUpdateError } = await supabase
+      .from('game_sessions')
+      .update({ player_name: trimmed })
+      .eq('user_id', userId)
+      .in('game_id', gameIds)
+
+    if (sessionUpdateError) {
+      console.error('Error updating game session names:', sessionUpdateError)
+      // Non-fatal - group member name is updated
+    }
+  }
+
+  return true
+}
+
