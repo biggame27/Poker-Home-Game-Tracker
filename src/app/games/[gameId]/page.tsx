@@ -10,8 +10,8 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { JoinGameForm } from '@/components/JoinGameForm'
 import { Leaderboard } from '@/components/Leaderboard'
-import { getGameById, getGroupById, removeGameSession, updateGameStatus, updateGameSession } from '@/lib/supabase/storage'
-import type { Game, Group } from '@/types'
+import { addGuestMember, getGameById, getGroupById, removeGameSession, updateGameStatus, updateGameSession, removeGameParticipantAsAdmin } from '@/lib/supabase/storage'
+import type { Game, Group, GameSession } from '@/types'
 import { Users, ArrowLeft, Copy, Check, Lock, Unlock, UserPlus, LogOut } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
@@ -47,6 +47,14 @@ function GameDetailContent() {
   const [disputeBuyIn, setDisputeBuyIn] = useState<string>('')
   const [disputePayout, setDisputePayout] = useState<string>('')
   const [disputeNoticeOpen, setDisputeNoticeOpen] = useState(false)
+  const [addMemberOpen, setAddMemberOpen] = useState(false)
+  const [addMemberMode, setAddMemberMode] = useState<'group' | 'guest' | 'one-time'>('group')
+  const [selectedGroupMemberId, setSelectedGroupMemberId] = useState<string>('')
+  const [memberSearch, setMemberSearch] = useState('')
+  const [memberListOpen, setMemberListOpen] = useState(false)
+  const [memberName, setMemberName] = useState('')
+  const [memberSaving, setMemberSaving] = useState(false)
+  const [selectedMembers, setSelectedMembers] = useState<{ userId: string; userName: string }[]>([])
 
   const getNowLocal = () => {
     const now = new Date()
@@ -225,6 +233,176 @@ function GameDetailContent() {
     setDisputeNoticeOpen(true)
   }
 
+  const handleOpenAddMember = () => {
+    if (!game) return
+    // Default to group mode if there are eligible members, otherwise guest
+    const memberIdsInGame = new Set(game.sessions.map(s => s.userId).filter(Boolean) as string[])
+    const eligibleMembers = (group?.members || []).filter(m => !memberIdsInGame.has(m.userId))
+    const defaultToGuest = eligibleMembers.length === 0
+    setAddMemberMode(defaultToGuest ? 'guest' : 'group')
+    if (defaultToGuest) {
+      setSelectedGroupMemberId('')
+      setMemberSearch('')
+      setMemberName('')
+      setMemberListOpen(false)
+      setSelectedMembers([])
+    } else {
+      setSelectedGroupMemberId(eligibleMembers[0].userId)
+      setMemberSearch('')
+      setMemberName(eligibleMembers[0].userName || '')
+      setMemberListOpen(true)
+      setSelectedMembers([])
+    }
+    setAddMemberOpen(true)
+  }
+
+  const handleKickParticipant = async (participantUserId: string | undefined | null, playerName: string) => {
+    if (!game || !user?.id || !participantUserId) return
+    const confirmed = typeof window === 'undefined'
+      ? true
+      : window.confirm(`Remove ${playerName} from this game?`)
+    if (!confirmed) return
+
+    const success = await removeGameParticipantAsAdmin(game.id, participantUserId, user.id)
+    if (success) {
+      await refreshGame()
+    } else {
+      alert('Failed to remove participant.')
+    }
+  }
+
+  const handleSelectMember = async (member: any, alreadyInGame: boolean) => {
+    if (alreadyInGame) return
+    if (member?._guestOnly && group) {
+      const added = await addGuestMember(group.id, member.userName || 'Guest')
+      if (!added) {
+        alert('Failed to add guest. Please try again.')
+        return
+      }
+      setGroup(prev => prev ? { ...prev, members: [...prev.members, added] } : prev)
+      setSelectedMembers(prev => prev.some(m => m.userId === added.userId) ? prev : [...prev, { userId: added.userId, userName: added.userName }])
+      setSelectedGroupMemberId(added.userId)
+      const chosen = added.userName || 'Guest'
+      setMemberName('')
+      setMemberSearch('')
+    } else {
+      setSelectedMembers(prev => {
+        if (prev.some(m => m.userId === member.userId)) return prev
+        return [...prev, { userId: member.userId, userName: member.userName }]
+      })
+      setSelectedGroupMemberId(member.userId)
+      setMemberName('')
+      setMemberSearch('')
+    }
+    setMemberListOpen(false)
+  }
+
+  const handleSaveMember = async () => {
+    if (!game || !group) return
+    const memberIdsInGame = new Set(game.sessions.map(s => s.userId).filter(Boolean) as string[])
+    const eligibleMembers = (group?.members || []).filter(m => !memberIdsInGame.has(m.userId))
+    let userId: string | null = null
+    let playerName = memberName.trim()
+    let roleOverride: GameSession['role'] | undefined = undefined
+    let isOneTime = false
+    const nameLower = playerName.toLowerCase()
+    const savedGuestMatch = (group.members || []).find(
+      m => m.userId?.startsWith('guest-') && (m.userName || '').toLowerCase() === nameLower
+    )
+    const existingGuestSessionMatch = game.sessions.some(
+      s =>
+        (!s.userId || s.userId?.startsWith('guest-') || s.role === 'guest') &&
+        (s.playerName || '').toLowerCase() === nameLower
+    )
+
+    if (addMemberMode === 'group') {
+      if (selectedMembers.length === 0) {
+        alert('Please select at least one player.')
+        return
+      }
+    } else if (addMemberMode === 'guest') {
+      if (!playerName) {
+        alert('Please enter a guest name.')
+        return
+      }
+      // If a guest with this name exists, confirm whether to add another; otherwise reuse existing
+      if (savedGuestMatch || existingGuestSessionMatch) {
+        const proceedNew = typeof window === 'undefined'
+          ? true
+          : window.confirm('A guest with this name already exists. Add another?')
+        if (!proceedNew && savedGuestMatch) {
+          userId = savedGuestMatch.userId
+          playerName = savedGuestMatch.userName
+          roleOverride = 'guest'
+        } else if (!proceedNew) {
+          return
+        }
+      }
+      if (!userId) {
+        const added = await addGuestMember(group.id, playerName)
+        if (!added) {
+          alert('Failed to add guest. Please try again.')
+          return
+        }
+        userId = added.userId
+        playerName = added.userName
+        setGroup(prev => prev ? { ...prev, members: [...prev.members, added] } : prev)
+      }
+      roleOverride = 'guest'
+    } else {
+      // one-time player (ghost). Keep userId null, do not add to group, set role to one-time.
+      if (!playerName) {
+        alert('Please enter a name.')
+        return
+      }
+      if (savedGuestMatch || existingGuestSessionMatch) {
+        const proceed = typeof window === 'undefined'
+          ? true
+          : window.confirm('A guest with this name already exists. Add another one-time player?')
+        if (!proceed) {
+          return
+        }
+      }
+      userId = null
+      roleOverride = undefined // store as guest role; differentiate in UI by null userId
+      isOneTime = true
+    }
+
+    const buyInAmount = 0
+    const endAmount = 0
+
+    setMemberSaving(true)
+    try {
+      if (addMemberMode === 'group') {
+        for (const member of selectedMembers) {
+          const ok = await updateGameSession(game.id, member.userId, member.userName, buyInAmount, endAmount, 'member')
+          if (!ok) {
+            alert(`Failed to add ${member.userName}. Make sure the game is not closed.`)
+            setMemberSaving(false)
+            return
+          }
+        }
+      } else {
+        const success = await updateGameSession(game.id, userId, playerName, buyInAmount, endAmount, roleOverride)
+        if (!success) {
+          alert('Failed to add member. Make sure the game is not closed.')
+          return
+        }
+      }
+      setAddMemberOpen(false)
+      setSelectedMembers([])
+      setMemberName('')
+      setMemberSearch('')
+      setSelectedGroupMemberId('')
+      await refreshGame()
+    } catch (error) {
+      console.error('Error adding member:', error)
+      alert('Failed to add member. Please try again.')
+    } finally {
+      setMemberSaving(false)
+    }
+  }
+
   const copyGameLink = () => {
     if (gameId) {
       const url = `${window.location.origin}/games/${gameId}`
@@ -286,6 +464,7 @@ function GameDetailContent() {
   const isGroupOwner = group
     ? group.createdBy === user?.id || group.members.some(m => m.userId === user?.id && m.role === 'owner')
     : false
+  const isGroupMember = group?.members.some(m => m.userId === user?.id) || false
   const canAdminEdit = isHost || isGroupOwner
   const isAlreadyJoined = game.sessions.some(s => s.userId === user?.id)
   const userSession = game.sessions.find(s => s.userId === user?.id)
@@ -295,28 +474,50 @@ function GameDetailContent() {
   const totalBuyIns = game.sessions.reduce((sum, s) => sum + (s.buyIn || 0), 0)
   const totalEndAmounts = game.sessions.reduce((sum, s) => sum + (s.endAmount || 0), 0)
   const totalProfit = totalEndAmounts - totalBuyIns
+  const guestParticipants = Array.from(
+    new Map(
+      game.sessions
+        .filter(s => (s as any).role === 'guest')
+        .map(s => [s.playerName.toLowerCase(), { name: s.playerName }])
+    ).values()
+  )
+  const canKick = canAdminEdit && !isClosed
 
-  const handleQuickJoin = async () => {
+  const handleQuickJoin = async (): Promise<boolean> => {
     if (!user?.id) {
       alert('You must be logged in to join this game.')
-      return
+      return false
     }
-    if (isAlreadyJoined || isClosed) return
+    if (isAlreadyJoined || isClosed) return false
 
     setParticipantUpdating(true)
     try {
       const playerName = user.fullName || user.emailAddresses?.[0]?.emailAddress || 'Player'
-      const success = await updateGameSession(game.id, user.id, playerName, 0, 0)
+      const role = (!isGroupMember && !isGroupOwner) ? 'guest' : 'member'
+      const success = await updateGameSession(game.id, user.id, playerName, 0, 0, role)
       if (!success) {
         alert('Failed to join game. Please try again.')
-        return
+        return false
       }
       await refreshGame()
+      return true
     } catch (error) {
       console.error('Error joining game:', error)
       alert('Failed to join game. Please try again.')
+      return false
     } finally {
       setParticipantUpdating(false)
+    }
+  }
+
+  const handleAddToDashboard = async () => {
+    if (!isClosed) {
+      alert('You can only add this game to your dashboard after it is closed.')
+      return
+    }
+    const joined = await handleQuickJoin()
+    if (joined) {
+      router.push('/')
     }
   }
 
@@ -348,27 +549,29 @@ function GameDetailContent() {
       <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
         {/* Header */}
         <div className="space-y-4">
-          <div className="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="gap-2"
-              onClick={() => {
-                if (from === 'group' && groupId) {
-                  router.push(`/groups/${groupId}`)
-                } else if (from === 'dashboard') {
-                  router.push('/')
-                } else if (group) {
-                  router.push(`/groups/${group.id}`)
-                } else {
-                  router.push('/')
-                }
-              }}
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Button>
-          </div>
+          {from && (
+            <div className="flex items-center gap-4">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="gap-2"
+                onClick={() => {
+                  if (from === 'group' && groupId) {
+                    router.push(`/groups/${groupId}`)
+                  } else if (from === 'dashboard') {
+                    router.push('/')
+                  } else if (group) {
+                    router.push(`/groups/${group.id}`)
+                  } else {
+                    router.push('/')
+                  }
+                }}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Button>
+            </div>
+          )}
           
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-2">
@@ -437,6 +640,17 @@ function GameDetailContent() {
                       : participantUpdating
                         ? 'Joining...'
                         : 'Join Game'}
+                </Button>
+              )}
+              {user && !isAlreadyJoined && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={handleAddToDashboard}
+                  disabled={participantUpdating || isClosed}
+                >
+                  Add to dashboard
                 </Button>
               )}
               <Button
@@ -691,16 +905,20 @@ function GameDetailContent() {
           </Card>
         )}
 
-        {/* Join / Personal Session Form */}
+        {/* Participants (merged list in player format) */}
         {user && (
           <div id="join-game-section">
             <JoinGameForm 
               game={game}
+              canAddMember={canAdminEdit && !isClosed}
+              onAddMember={canAdminEdit && !isClosed ? handleOpenAddMember : undefined}
+              canKick={canKick}
+              onKickParticipant={(userId, playerName) => handleKickParticipant(userId, playerName)}
             />
           </div>
         )}
 
-        {/* Players List / Leaderboard */}
+        {/* Leaderboard */}
         {game.sessions.length > 0 && (
           <Leaderboard games={[game]} singleGame={true} />
         )}
@@ -841,6 +1059,194 @@ function GameDetailContent() {
               <Button variant="outline" onClick={() => setDisputeNoticeOpen(false)}>
                 Close
               </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {addMemberOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
+          <Card className="w-full max-w-xl">
+            <CardHeader>
+              <CardTitle>Add Player</CardTitle>
+              <CardDescription>
+                Add a group member or a guest. Guests are saved without an account so they can claim their stats later.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="memberType">Player type</Label>
+                <Select
+                  value={addMemberMode}
+                  onValueChange={(val: 'group' | 'guest' | 'one-time') => {
+                    if (val === 'group') {
+                      const memberIdsInGame = new Set(game.sessions.map(s => s.userId).filter(Boolean) as string[])
+                      const eligible = (group?.members || []).filter(m => !memberIdsInGame.has(m.userId))
+                      setAddMemberMode('group')
+                      setSelectedGroupMemberId(eligible[0]?.userId || '')
+                      setMemberName(eligible[0]?.userName || '')
+                      setMemberSearch('')
+                      setSelectedMembers([])
+                    } else if (val === 'guest') {
+                      setAddMemberMode('guest')
+                      setSelectedGroupMemberId('')
+                      setMemberName('')
+                      setMemberSearch('')
+                      setSelectedMembers([])
+                    } else {
+                      setAddMemberMode('one-time')
+                      setSelectedGroupMemberId('')
+                      setMemberName('')
+                      setMemberSearch('')
+                      setSelectedMembers([])
+                    }
+                  }}
+                >
+                  <SelectTrigger id="memberType" className="w-full">
+                    <SelectValue placeholder="Choose member type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="group">Existing player</SelectItem>
+                    <SelectItem value="guest">Guest</SelectItem>
+                    <SelectItem value="one-time">One-time player</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {addMemberMode === 'group' ? (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="memberSearch">Search players</Label>
+                    <Input
+                      id="memberSearch"
+                      placeholder="Search by name"
+                      autoComplete="off"
+                      value={memberSearch}
+                      onChange={(e) => {
+                        setMemberSearch(e.target.value)
+                        setMemberListOpen(true)
+                      }}
+                      onFocus={() => setMemberListOpen(true)}
+                      onBlur={() => setMemberListOpen(false)}
+                    />
+                    {addMemberMode === 'group' && selectedMembers.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedMembers.map(m => (
+                          <span
+                            key={m.userId}
+                            className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs"
+                          >
+                            {m.userName}
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={() =>
+                                setSelectedMembers(prev => prev.filter(sel => sel.userId !== m.userId))
+                              }
+                              aria-label={`Remove ${m.userName}`}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {memberListOpen && (
+                    <div className="space-y-1 max-h-48 overflow-y-auto rounded-md border p-2">
+                      {(() => {
+                        const baseMembers = group?.members || []
+                          const guestOnlyMembers = guestParticipants
+                            .filter(g =>
+                              !baseMembers.some(m => (m.userName || '').toLowerCase() === (g.name || '').toLowerCase())
+                            )
+                            .map(g => ({
+                            userId: '',
+                            userName: g.name,
+                            joinedAt: '',
+                            role: 'member' as const,
+                            _guestOnly: true,
+                          }))
+
+                        const merged = [...baseMembers, ...guestOnlyMembers]
+                        const seen = new Set<string>()
+                        const filtered = merged.filter(m => {
+                          const key = (m.userName || 'Member').toLowerCase()
+                          if (seen.has(key)) return false
+                          seen.add(key)
+                          return key.includes((memberSearch || '').toLowerCase())
+                        })
+
+                        if (filtered.length === 0) {
+                          return <p className="text-xs text-muted-foreground px-1">No members match your search.</p>
+                        }
+
+                        return filtered.map(m => {
+                          const alreadyInGame = game.sessions.some(s => s.userId === m.userId)
+                          return (
+                            <button
+                              type="button"
+                              key={m.userId}
+                              className={`w-full text-left px-2 py-1.5 rounded-md border flex items-center justify-between text-sm ${
+                                selectedMembers.some(sel => sel.userId === m.userId) ? 'border-primary text-primary' : 'border-muted'
+                              } ${alreadyInGame ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                void handleSelectMember(m, alreadyInGame)
+                              }}
+                              disabled={alreadyInGame}
+                            >
+                              <span className="truncate">{m.userName || 'Member'}</span>
+                              {alreadyInGame && (
+                                <span className="text-[10px] uppercase tracking-wide rounded-full bg-muted text-muted-foreground px-2 py-0.5">
+                                  Added
+                                </span>
+                              )}
+                              {(m as any)._guestOnly && (
+                                <span className="text-[10px] uppercase tracking-wide rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 border border-blue-200">
+                                  Guest
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })
+                      })()}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="memberName">
+                    {addMemberMode === 'guest' ? 'Guest name' : 'One-time player name'}
+                  </Label>
+                  <Input
+                    id="memberName"
+                    placeholder="Player name"
+                    value={memberName}
+                    onChange={(e) => setMemberName(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={() => {
+                    setAddMemberOpen(false)
+                    setSelectedMembers([])
+                    setMemberName('')
+                    setMemberSearch('')
+                    setSelectedGroupMemberId('')
+                  }}
+                  disabled={memberSaving}
+                >
+                  Cancel
+                </Button>
+                <Button type="button" onClick={handleSaveMember} disabled={memberSaving}>
+                  {memberSaving ? 'Adding...' : 'Add member'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

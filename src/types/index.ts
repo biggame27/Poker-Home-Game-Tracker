@@ -5,6 +5,7 @@ export interface GameSession {
   buyIn: number
   endAmount: number
   profit: number
+  role?: 'guest' | 'member' | 'bank' | 'host' | 'admin' | 'one-time'
   userId?: string // Clerk user ID if player is a registered user
 }
 
