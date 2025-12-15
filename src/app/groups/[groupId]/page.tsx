@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Leaderboard } from '@/components/Leaderboard'
 import { RunningTotalsChart } from '@/components/RunningTotalsChart'
 import { OverallStats } from '@/components/OverallStats'
-import { getGroupById, getGamesByGroup, deleteGame, deleteGroup, updateGroup, addGuestMember, removeGroupMember, removeGuestFromGroupSessions, getClaimRequests, submitClaimRequest, approveClaimRequest, denyClaimRequest } from '@/lib/supabase/storage'
+import { getGroupById, getGamesByGroup, deleteGame, deleteGroup, updateGroup, addGuestMember, removeGroupMember, removeGuestFromGroupSessions, getClaimRequests, submitClaimRequest, approveClaimRequest, denyClaimRequest, promoteToAdmin, demoteFromAdmin } from '@/lib/supabase/storage'
 import type { Group, Game } from '@/types'
 import { Users, PlusCircle, Copy, Check, X, Trash2, EllipsisVertical } from 'lucide-react'
 import Link from 'next/link'
@@ -238,6 +238,40 @@ export default function GroupDetailPage() {
     }
   }
 
+  const handlePromoteToAdmin = async (memberId: string) => {
+    if (!group || !user?.id) return
+    const success = await promoteToAdmin(group.id, memberId, user.id)
+    if (success) {
+      // Optimistically update the UI
+      setGroup(prev => prev ? {
+        ...prev,
+        members: prev.members.map(m => 
+          m.userId === memberId ? { ...m, role: 'admin' as const } : m
+        )
+      } : prev)
+      await loadData()
+    } else {
+      setNotification({ type: 'error', message: 'Failed to promote member.' })
+    }
+  }
+
+  const handleDemoteFromAdmin = async (memberId: string) => {
+    if (!group || !user?.id) return
+    const success = await demoteFromAdmin(group.id, memberId, user.id)
+    if (success) {
+      // Optimistically update the UI
+      setGroup(prev => prev ? {
+        ...prev,
+        members: prev.members.map(m => 
+          m.userId === memberId ? { ...m, role: 'member' as const } : m
+        )
+      } : prev)
+      await loadData()
+    } else {
+      setNotification({ type: 'error', message: 'Failed to demote admin.' })
+    }
+  }
+
   if (!isLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -269,6 +303,8 @@ export default function GroupDetailPage() {
   }
 
   const isOwner = group.createdBy === user?.id
+  const isAdmin = group.members.some(m => m.userId === user?.id && m.role === 'admin')
+  const isOwnerOrAdmin = isOwner || isAdmin
   const isMember = group.members.some(m => m.userId === user?.id)
   const savedGuests = group.members.filter(m => m.userId?.startsWith('guest-'))
   const regularMembers = group.members.filter(m => !m.userId?.startsWith('guest-'))
@@ -448,7 +484,7 @@ export default function GroupDetailPage() {
             )}
           </CardHeader>
           <CardContent className="space-y-6">
-            {isOwner && claimRequests.filter(r => r.status === 'pending').length > 0 && (
+            {isOwnerOrAdmin && claimRequests.filter(r => r.status === 'pending').length > 0 && (
               <div className="rounded-lg border p-3 bg-muted/50 space-y-2">
                 <p className="text-sm font-semibold">Pending guest claims</p>
                 <div className="space-y-2">
@@ -493,16 +529,52 @@ export default function GroupDetailPage() {
                         Owner
                       </span>
                     )}
+                    {member.role === 'admin' && (
+                      <span className="text-xs px-2 py-1 bg-blue-500/10 text-blue-600 rounded-full">
+                        Admin
+                      </span>
+                    )}
                     {isOwner && member.role !== 'owner' && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleKickMember(member.userId)}
-                        aria-label="Remove member"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <>
+                        {member.role === 'admin' ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleDemoteFromAdmin(member.userId)
+                            }}
+                            aria-label="Demote from admin"
+                          >
+                            Demote
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handlePromoteToAdmin(member.userId)
+                            }}
+                            aria-label="Promote to admin"
+                          >
+                            Promote
+                          </Button>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleKickMember(member.userId)}
+                          aria-label="Remove member"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>

@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS group_members (
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL, -- Clerk user ID
   user_name TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('owner', 'member')),
+  role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member')),
   joined_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(group_id, user_id)
 );
@@ -164,6 +164,16 @@ CREATE POLICY "Members can read group members"
 CREATE POLICY "Users can join groups"
   ON group_members FOR INSERT
   WITH CHECK (true); -- We'll validate in application code
+
+-- Group members: Owners can update member roles
+CREATE POLICY "Owners can update group members"
+  ON group_members FOR UPDATE
+  USING (true); -- We'll validate ownership in application code
+
+-- Group members: Owners can delete members
+CREATE POLICY "Owners can delete group members"
+  ON group_members FOR DELETE
+  USING (true); -- We'll validate ownership in application code
 
 -- Games: Can read games in their groups
 CREATE POLICY "Members can read games"

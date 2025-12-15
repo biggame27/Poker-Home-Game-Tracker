@@ -292,8 +292,9 @@ function GameDetailContent() {
   const isGroupOwner = group
     ? group.createdBy === user?.id || group.members.some(m => m.userId === user?.id && m.role === 'owner')
     : false
+  const isGroupAdmin = group?.members.some(m => m.userId === user?.id && m.role === 'admin') || false
   const isGroupMember = group?.members.some(m => m.userId === user?.id) || false
-  const canAdminEdit = isHost || isGroupOwner
+  const canAdminEdit = isHost || isGroupOwner || isGroupAdmin
   const isAlreadyJoined = game.sessions.some(s => s.userId === user?.id)
   const userSession = game.sessions.find(s => s.userId === user?.id)
   const totalPlayers = game.sessions.length

@@ -27,6 +27,23 @@ async function isGroupOwner(userId: string, groupId: string) {
   return groupRow.created_by === userId
 }
 
+async function isGroupAdmin(userId: string, groupId: string) {
+  const supabase = createClient()
+  const { data: memberRow } = await supabase
+    .from('group_members')
+    .select('role')
+    .eq('group_id', groupId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  return memberRow?.role === 'admin'
+}
+
+async function isGroupOwnerOrAdmin(userId: string, groupId: string) {
+  const isOwner = await isGroupOwner(userId, groupId)
+  if (isOwner) return true
+  return await isGroupAdmin(userId, groupId)
+}
+
 // Helper to ensure user exists in database
 async function ensureUser(clerkId: string, email?: string, fullName?: string) {
   try {
@@ -118,7 +135,7 @@ export async function getGroups(userId: string): Promise<Group[]> {
         userId: m.user_id,
         userName: m.user_name,
         joinedAt: m.joined_at,
-        role: m.role as 'owner' | 'member'
+        role: m.role as 'owner' | 'admin' | 'member'
       }))
     }))
 
@@ -166,7 +183,7 @@ export async function getGroupById(groupId: string): Promise<Group | null> {
       userId: m.user_id,
       userName: m.user_name,
       joinedAt: m.joined_at,
-      role: m.role as 'owner' | 'member'
+      role: m.role as 'owner' | 'admin' | 'member'
     }))
   }
 }
@@ -198,7 +215,7 @@ export async function getGroupByInviteCode(inviteCode: string): Promise<Group | 
       userId: m.user_id,
       userName: m.user_name,
       joinedAt: m.joined_at,
-      role: m.role as 'owner' | 'member'
+      role: m.role as 'owner' | 'admin' | 'member'
     }))
   }
 }
@@ -242,7 +259,7 @@ export async function removeGroupMember(
   actingUserId: string
 ): Promise<boolean> {
   const supabase = createClient()
-  // Only group owner can kick
+  // Only group owner can remove members (admins cannot)
   const owner = await isGroupOwner(actingUserId, groupId)
   if (!owner) {
     console.warn('Unauthorized group member removal attempt')
@@ -257,6 +274,112 @@ export async function removeGroupMember(
 
   if (error) {
     console.error('Error removing group member:', error)
+    return false
+  }
+
+  return true
+}
+
+export async function promoteToAdmin(
+  groupId: string,
+  memberUserId: string,
+  actingUserId: string
+): Promise<boolean> {
+  const supabase = createClient()
+  // Only group owner can promote members
+  const owner = await isGroupOwner(actingUserId, groupId)
+  if (!owner) {
+    console.warn('Unauthorized member promotion attempt')
+    return false
+  }
+
+  // Don't allow promoting the owner
+  const isOwner = await isGroupOwner(memberUserId, groupId)
+  if (isOwner) {
+    console.warn('Cannot promote owner to admin')
+    return false
+  }
+
+  // First check if the member exists
+  const { data: existingMember, error: checkError } = await supabase
+    .from('group_members')
+    .select('id, role')
+    .eq('group_id', groupId)
+    .eq('user_id', memberUserId)
+    .single()
+
+  if (checkError || !existingMember) {
+    console.error('Error finding member to promote:', checkError)
+    return false
+  }
+
+  const { data, error } = await supabase
+    .from('group_members')
+    .update({ role: 'admin' })
+    .eq('group_id', groupId)
+    .eq('user_id', memberUserId)
+    .select()
+
+  if (error) {
+    console.error('Error promoting member to admin:', error)
+    return false
+  }
+
+  if (!data || data.length === 0) {
+    console.error('No rows updated when promoting member')
+    return false
+  }
+
+  return true
+}
+
+export async function demoteFromAdmin(
+  groupId: string,
+  memberUserId: string,
+  actingUserId: string
+): Promise<boolean> {
+  const supabase = createClient()
+  // Only group owner can demote admins
+  const owner = await isGroupOwner(actingUserId, groupId)
+  if (!owner) {
+    console.warn('Unauthorized admin demotion attempt')
+    return false
+  }
+
+  // Don't allow demoting the owner
+  const isOwner = await isGroupOwner(memberUserId, groupId)
+  if (isOwner) {
+    console.warn('Cannot demote owner')
+    return false
+  }
+
+  // First check if the member exists
+  const { data: existingMember, error: checkError } = await supabase
+    .from('group_members')
+    .select('id, role')
+    .eq('group_id', groupId)
+    .eq('user_id', memberUserId)
+    .single()
+
+  if (checkError || !existingMember) {
+    console.error('Error finding admin to demote:', checkError)
+    return false
+  }
+
+  const { data, error } = await supabase
+    .from('group_members')
+    .update({ role: 'member' })
+    .eq('group_id', groupId)
+    .eq('user_id', memberUserId)
+    .select()
+
+  if (error) {
+    console.error('Error demoting admin to member:', error)
+    return false
+  }
+
+  if (!data || data.length === 0) {
+    console.error('No rows updated when demoting admin')
     return false
   }
 
@@ -391,8 +514,8 @@ export async function approveClaimRequest(
     return false
   }
 
-  const isOwnerUser = await isGroupOwner(actingUserId, req.group_id)
-  if (!isOwnerUser) {
+  const isOwnerOrAdmin = await isGroupOwnerOrAdmin(actingUserId, req.group_id)
+  if (!isOwnerOrAdmin) {
     console.warn('Unauthorized claim approval attempt')
     return false
   }
@@ -466,8 +589,8 @@ export async function denyClaimRequest(
     return false
   }
 
-  const isOwnerUser = await isGroupOwner(actingUserId, req.group_id)
-  if (!isOwnerUser) {
+  const isOwnerOrAdmin = await isGroupOwnerOrAdmin(actingUserId, req.group_id)
+  if (!isOwnerOrAdmin) {
     console.warn('Unauthorized claim denial attempt')
     return false
   }
@@ -1009,9 +1132,9 @@ export async function removeGameParticipantAsAdmin(
     return false
   }
 
-  const owner = await isGroupOwner(actingUserId, gameRow.group_id)
+  const ownerOrAdmin = await isGroupOwnerOrAdmin(actingUserId, gameRow.group_id)
   const isHost = gameRow.created_by === actingUserId
-  if (!owner && !isHost) {
+  if (!ownerOrAdmin && !isHost) {
     console.warn('Unauthorized game participant removal attempt.')
     return false
   }

@@ -33,7 +33,7 @@ export interface GroupMember {
   userId: string // Clerk user ID
   userName: string
   joinedAt: string
-  role: 'owner' | 'member'
+  role: 'owner' | 'admin' | 'member'
 }
 
 export interface PlayerStats {
