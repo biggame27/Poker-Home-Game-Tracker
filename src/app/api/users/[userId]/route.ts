@@ -19,7 +19,8 @@ export async function GET(
     console.log('Fetching user:', userId)
     
     // Use Clerk client instance
-    const user = await clerkClient.users.getUser(userId)
+    const client = await clerkClient()
+    const user = await client.users.getUser(userId)
     
     // Get first and last name from Clerk user object
     const firstName = user.firstName || ''
