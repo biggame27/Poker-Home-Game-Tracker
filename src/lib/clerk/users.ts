@@ -2,7 +2,8 @@ import { clerkClient } from '@clerk/nextjs/server'
 
 export async function getUserDisplayName(userId: string): Promise<string> {
   try {
-    const user = await clerkClient.users.getUser(userId)
+    const client = await clerkClient()
+    const user = await client.users.getUser(userId)
     const firstName = user.firstName || ''
     const lastName = user.lastName || ''
     
@@ -22,7 +23,8 @@ export async function getUserDisplayNames(userIds: string[]): Promise<Record<str
   const names: Record<string, string> = {}
   
   try {
-    const users = await clerkClient.users.getUserList({ userId: userIds })
+    const client = await clerkClient()
+    const users = await client.users.getUserList({ userId: userIds })
     
     for (const user of users.data) {
       const firstName = user.firstName || ''

@@ -126,6 +126,39 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
     return <span className="text-muted-foreground">#{rank + 1}</span>
   }
 
+  const handleStartEditName = (playerId: string, currentName: string) => {
+    setEditingPlayerId(playerId)
+    setEditingName(currentName)
+  }
+
+  const handleCancelEditName = () => {
+    setEditingPlayerId(null)
+    setEditingName('')
+  }
+
+  const handleSaveName = async () => {
+    if (!groupId || !user?.id || !editingPlayerId) return
+    
+    const trimmed = editingName.trim()
+    if (!trimmed || trimmed.length === 0) {
+      return
+    }
+
+    setSavingName(true)
+    try {
+      const success = await updateGroupMemberName(groupId, editingPlayerId, trimmed, user.id)
+      if (success) {
+        setEditingPlayerId(null)
+        setEditingName('')
+        onNameUpdate?.()
+      }
+    } catch (error) {
+      console.error('Error updating name:', error)
+    } finally {
+      setSavingName(false)
+    }
+  }
+
   const tableContent = (
     <Table>
           <TableHeader>

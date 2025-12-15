@@ -14,6 +14,7 @@ interface RunningTotalsChartProps {
   description?: string
   groupId?: string
   userId?: string
+  guestName?: string
 }
 
 const chartConfig = {
@@ -38,18 +39,27 @@ export function RunningTotalsChart({
   description = cumulative 
     ? 'Cumulative profit/loss over time' 
     : 'Profit/loss per game date',
-  userId
+  userId,
+  guestName
 }: RunningTotalsChartProps) {
   const chartData = useMemo(() => {
     if (!games || games.length === 0) {
       return []
     }
 
-    // Process games data into chart format, filtering by userId if provided
+    // Process games data into chart format, filtering by userId or guestName if provided
     const processed = games
       .flatMap(game => 
         game.sessions
-          ?.filter((session: GameSession) => !userId || session.userId === userId)
+          ?.filter((session: GameSession) => {
+            if (userId) {
+              return session.userId === userId
+            }
+            if (guestName) {
+              return !session.userId && session.playerName?.toLowerCase() === guestName.toLowerCase()
+            }
+            return true
+          })
           ?.map((session: GameSession) => ({
             date: new Date(game.date),
             profit: session.profit || (session.endAmount - session.buyIn)
@@ -84,7 +94,7 @@ export function RunningTotalsChart({
         total: Number(total.toFixed(2))
       }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-  }, [games, cumulative, userId])
+  }, [games, cumulative, userId, guestName])
 
 
   // Calculate final value to determine color
