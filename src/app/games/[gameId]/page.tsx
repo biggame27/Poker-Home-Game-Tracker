@@ -10,12 +10,11 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { JoinGameForm } from '@/components/JoinGameForm'
 import { Leaderboard } from '@/components/Leaderboard'
-import { addGuestMember, getGameById, getGroupById, removeGameSession, updateGameStatus, updateGameSession, removeGameParticipantAsAdmin } from '@/lib/supabase/storage'
+import { addGuestMember, getGameById, getGroupById, removeGameSession, updateGameSession, removeGameParticipantAsAdmin } from '@/lib/supabase/storage'
 import type { Game, Group, GameSession } from '@/types'
-import { Users, ArrowLeft, Copy, Check, Lock, Unlock, UserPlus, LogOut } from 'lucide-react'
+import { Users, ArrowLeft, Copy, Check, UserPlus, LogOut } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import { Badge } from '@/components/ui/badge'
 
 function GameDetailContent() {
   const params = useParams()
@@ -26,7 +25,6 @@ function GameDetailContent() {
   const [game, setGame] = useState<Game | null>(null)
   const [group, setGroup] = useState<Group | null>(null)
   const [copied, setCopied] = useState(false)
-  const [statusUpdating, setStatusUpdating] = useState(false)
   const [editingSessions, setEditingSessions] = useState<{
     playerName: string
     buyIn: string
@@ -35,32 +33,14 @@ function GameDetailContent() {
   }[]>([])
   const [savingIndex, setSavingIndex] = useState<number | null>(null)
   const [participantUpdating, setParticipantUpdating] = useState(false)
-  const [payoutCompletedAt, setPayoutCompletedAt] = useState<string>('')
-  const [payoutMethod, setPayoutMethod] = useState<string>('')
-  const [payoutHandle, setPayoutHandle] = useState<string>('')
-  const [sessionConfirmed, setSessionConfirmed] = useState(false)
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
-  const [confirmMethod, setConfirmMethod] = useState<string>('')
-  const [confirmPayoutTime, setConfirmPayoutTime] = useState<string>('')
-  const [confirmHandle, setConfirmHandle] = useState<string>('')
-  const [disputeDialogOpen, setDisputeDialogOpen] = useState(false)
-  const [disputeBuyIn, setDisputeBuyIn] = useState<string>('')
-  const [disputePayout, setDisputePayout] = useState<string>('')
-  const [disputeNoticeOpen, setDisputeNoticeOpen] = useState(false)
   const [addMemberOpen, setAddMemberOpen] = useState(false)
-  const [addMemberMode, setAddMemberMode] = useState<'group' | 'guest' | 'one-time'>('group')
+  const [addMemberMode, setAddMemberMode] = useState<'group' | 'guest'>('group')
   const [selectedGroupMemberId, setSelectedGroupMemberId] = useState<string>('')
   const [memberSearch, setMemberSearch] = useState('')
   const [memberListOpen, setMemberListOpen] = useState(false)
   const [memberName, setMemberName] = useState('')
   const [memberSaving, setMemberSaving] = useState(false)
   const [selectedMembers, setSelectedMembers] = useState<{ userId: string; userName: string }[]>([])
-
-  const getNowLocal = () => {
-    const now = new Date()
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
-    return now.toISOString().slice(0, 16)
-  }
 
   // Get the referrer from query params
   const from = searchParams.get('from') || null
@@ -113,124 +93,6 @@ function GameDetailContent() {
     } catch (error) {
       console.error('Error refreshing game:', error)
     }
-  }
-
-  useEffect(() => {
-    if (!game || !user?.id) return
-    const key = `payout-${game.id}-${user.id}`
-    const stored = typeof window !== 'undefined' ? localStorage.getItem(key) : null
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        setPayoutCompletedAt(parsed.completedAt || '')
-        setPayoutMethod(parsed.method || '')
-        setPayoutHandle(parsed.handle || '')
-        setSessionConfirmed(Boolean(parsed.confirmed))
-        setConfirmMethod(parsed.method || '')
-        setConfirmPayoutTime(parsed.completedAt || '')
-        setConfirmHandle(parsed.handle || '')
-      } catch {
-        setPayoutCompletedAt(stored)
-        setPayoutMethod('')
-        setPayoutHandle('')
-        setSessionConfirmed(false)
-        setConfirmMethod('')
-        setConfirmPayoutTime('')
-        setConfirmHandle('')
-      }
-    } else {
-      const nowLocal = getNowLocal()
-      setPayoutCompletedAt(nowLocal)
-      setPayoutMethod('')
-      setPayoutHandle('')
-      setSessionConfirmed(false)
-      setConfirmMethod('')
-      setConfirmPayoutTime(nowLocal)
-      setConfirmHandle('')
-    }
-  }, [game?.id, user?.id])
-
-  // If the game is reopened (not completed), clear confirmation so it reappears next time it closes
-  useEffect(() => {
-    if (!game || !user?.id || typeof window === 'undefined') return
-    if (game.status === 'completed') return
-
-    const key = `payout-${game.id}-${user.id}`
-    const stored = localStorage.getItem(key)
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        localStorage.setItem(
-          key,
-          JSON.stringify({
-            ...parsed,
-            confirmed: false,
-          })
-        )
-      } catch {
-        localStorage.setItem(key, JSON.stringify({ completedAt: '', method: '', confirmed: false }))
-      }
-    }
-
-    setSessionConfirmed(false)
-    setConfirmDialogOpen(false)
-  }, [game?.status, game?.id, user?.id])
-
-  const savePayoutMeta = (next: { completedAt?: string; method?: string; handle?: string; confirmed?: boolean }) => {
-    if (!game || !user?.id) return
-    const key = `payout-${game.id}-${user.id}`
-    const payload = {
-      completedAt: next.completedAt ?? payoutCompletedAt,
-      method: next.method ?? payoutMethod,
-      handle: next.handle ?? payoutHandle,
-      confirmed: next.confirmed ?? sessionConfirmed,
-    }
-    localStorage.setItem(key, JSON.stringify(payload))
-  }
-
-  const handleConfirmSession = () => {
-    if (!game || !user?.id) return
-    setConfirmMethod(payoutMethod)
-    setConfirmHandle(payoutHandle)
-    setConfirmPayoutTime(payoutCompletedAt || getNowLocal())
-    setConfirmDialogOpen(true)
-  }
-
-  const handleConfirmDialogSave = () => {
-    if (!confirmMethod) {
-      alert('Please select a payment type.')
-      return
-    }
-    if (!confirmHandle.trim()) {
-      alert('Please enter your payment username/handle.')
-      return
-    }
-    const nextMethod = confirmMethod.trim()
-    const nextHandle = confirmHandle.trim()
-    setPayoutMethod(nextMethod)
-    setPayoutHandle(nextHandle)
-    setPayoutCompletedAt(confirmPayoutTime)
-    setSessionConfirmed(true)
-    savePayoutMeta({ confirmed: true, method: nextMethod, completedAt: confirmPayoutTime, handle: nextHandle })
-    setConfirmDialogOpen(false)
-  }
-
-  const handleOpenDispute = () => {
-    setDisputeBuyIn(userSession ? userSession.buyIn.toString() : '')
-    setDisputePayout(userSession ? userSession.endAmount.toString() : '')
-    setDisputeDialogOpen(true)
-  }
-
-  const handleSubmitDispute = () => {
-    const buyVal = disputeBuyIn.trim()
-    const payoutVal = disputePayout.trim()
-    if (!buyVal || !payoutVal) {
-      alert('Please enter both buy-in and payout amounts.')
-      return
-    }
-    setSessionConfirmed(true)
-    setDisputeDialogOpen(false)
-    setDisputeNoticeOpen(true)
   }
 
   const handleOpenAddMember = () => {
@@ -349,23 +211,6 @@ function GameDetailContent() {
         setGroup(prev => prev ? { ...prev, members: [...prev.members, added] } : prev)
       }
       roleOverride = 'guest'
-    } else {
-      // one-time player (ghost). Keep userId null, do not add to group, set role to one-time.
-      if (!playerName) {
-        alert('Please enter a name.')
-        return
-      }
-      if (savedGuestMatch || existingGuestSessionMatch) {
-        const proceed = typeof window === 'undefined'
-          ? true
-          : window.confirm('A guest with this name already exists. Add another one-time player?')
-        if (!proceed) {
-          return
-        }
-      }
-      userId = null
-      roleOverride = undefined // store as guest role; differentiate in UI by null userId
-      isOneTime = true
     }
 
     const buyInAmount = 0
@@ -412,23 +257,6 @@ function GameDetailContent() {
     }
   }
 
-  const changeGameStatus = async (status: 'open' | 'completed' | 'in-progress') => {
-    if (!gameId || !game || !user?.id) return
-    setStatusUpdating(true)
-    try {
-      const success = await updateGameStatus(gameId, status, user.id)
-      if (success) {
-        await refreshGame()
-      } else {
-        alert('Could not update the game status. Please try again.')
-      }
-    } catch (error) {
-      console.error('Error updating game status:', error)
-      alert('Could not update the game status. Please try again.')
-    } finally {
-      setStatusUpdating(false)
-    }
-  }
 
   if (!isLoaded) {
     return (
@@ -468,8 +296,6 @@ function GameDetailContent() {
   const canAdminEdit = isHost || isGroupOwner
   const isAlreadyJoined = game.sessions.some(s => s.userId === user?.id)
   const userSession = game.sessions.find(s => s.userId === user?.id)
-  const isClosed = game.status === 'completed'
-  const userLostMoney = userSession ? userSession.endAmount < userSession.buyIn : false
   const totalPlayers = game.sessions.length
   const totalBuyIns = game.sessions.reduce((sum, s) => sum + (s.buyIn || 0), 0)
   const totalEndAmounts = game.sessions.reduce((sum, s) => sum + (s.endAmount || 0), 0)
@@ -481,14 +307,14 @@ function GameDetailContent() {
         .map(s => [s.playerName.toLowerCase(), { name: s.playerName }])
     ).values()
   )
-  const canKick = canAdminEdit && !isClosed
+  const canKick = canAdminEdit
 
   const handleQuickJoin = async (): Promise<boolean> => {
     if (!user?.id) {
       alert('You must be logged in to join this game.')
       return false
     }
-    if (isAlreadyJoined || isClosed) return false
+    if (isAlreadyJoined) return false
 
     setParticipantUpdating(true)
     try {
@@ -511,10 +337,6 @@ function GameDetailContent() {
   }
 
   const handleAddToDashboard = async () => {
-    if (!isClosed) {
-      alert('You can only add this game to your dashboard after it is closed.')
-      return
-    }
     const joined = await handleQuickJoin()
     if (joined) {
       router.push('/')
@@ -526,7 +348,7 @@ function GameDetailContent() {
       alert('You must be logged in to leave this game.')
       return
     }
-    if (!isAlreadyJoined || isClosed) return
+    if (!isAlreadyJoined) return
 
     setParticipantUpdating(true)
     try {
@@ -583,41 +405,6 @@ function GameDetailContent() {
                   Group: {group.name}
                 </p>
               )}
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge variant={game.status === 'completed' ? 'secondary' : 'default'}>
-                  {game.status === 'completed' ? 'Closed' : game.status === 'in-progress' ? 'In Progress' : 'Open'}
-                </Badge>
-                {isGroupOwner && game.status === 'open' && (
-                  <Button
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => changeGameStatus('in-progress')}
-                    disabled={statusUpdating}
-                  >
-                    {statusUpdating ? 'Starting...' : 'Start Game'}
-                  </Button>
-                )}
-                {isGroupOwner && (
-                  <Button
-                    variant={game.status === 'completed' ? 'outline' : 'destructive'}
-                    size="sm"
-                    className="gap-2"
-                    onClick={() => changeGameStatus(game.status === 'completed' ? 'open' : 'completed')}
-                    disabled={statusUpdating}
-                  >
-                    {game.status === 'completed' ? (
-                      <Unlock className="h-4 w-4" />
-                    ) : (
-                      <Lock className="h-4 w-4" />
-                    )}
-                    {statusUpdating
-                      ? 'Updating...'
-                      : game.status === 'completed'
-                        ? 'Reopen Game'
-                        : 'Close Game'}
-                  </Button>
-                )}
-              </div>
               {game.notes && (
                 <p className="text-muted-foreground">{game.notes}</p>
               )}
@@ -628,12 +415,10 @@ function GameDetailContent() {
                   size="sm"
                   className="gap-2"
                   onClick={isAlreadyJoined ? handleQuickLeave : handleQuickJoin}
-                  disabled={participantUpdating || isClosed}
+                  disabled={participantUpdating}
                 >
                   {isAlreadyJoined ? <LogOut className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-                  {isClosed
-                    ? 'Game Closed'
-                    : isAlreadyJoined
+                  {isAlreadyJoined
                       ? participantUpdating
                         ? 'Leaving...'
                         : 'Leave Game'
@@ -648,7 +433,7 @@ function GameDetailContent() {
                   size="sm"
                   className="gap-2"
                   onClick={handleAddToDashboard}
-                  disabled={participantUpdating || isClosed}
+                  disabled={participantUpdating}
                 >
                   Add to dashboard
                 </Button>
@@ -752,7 +537,6 @@ function GameDetailContent() {
                           min="0"
                           className="w-32"
                           value={session.buyIn}
-                          disabled={game.status === 'completed' || game.status === 'open'}
                           onChange={(e) => {
                             const value = e.target.value
                             setEditingSessions(prev => {
@@ -771,7 +555,6 @@ function GameDetailContent() {
                           min="0"
                           className="w-32"
                           value={session.endAmount}
-                          disabled={game.status === 'completed' || game.status === 'open'}
                           onChange={(e) => {
                             const value = e.target.value
                             setEditingSessions(prev => {
@@ -796,7 +579,7 @@ function GameDetailContent() {
                         <Button
                           size="sm"
                           className="mt-1"
-                          disabled={savingIndex === index || game.status === 'completed' || game.status === 'open'}
+                          disabled={savingIndex === index}
                           onClick={async () => {
                             if (!user?.id) return
 
@@ -844,74 +627,13 @@ function GameDetailContent() {
           </Card>
         )}
 
-        {/* Closed game verification for current user */}
-        {user && isClosed && isAlreadyJoined && userSession && !sessionConfirmed && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Your Session Verification</CardTitle>
-              <CardDescription>
-                Review your buy-in and cash-out. You can confirm your session and, if you lost money, record payout details.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="rounded-md border p-3">
-                  <p className="text-xs text-muted-foreground">Buy-In</p>
-                  <p className="text-lg font-semibold">${userSession.buyIn.toFixed(2)}</p>
-                </div>
-                <div className="rounded-md border p-3">
-                  <p className="text-xs text-muted-foreground">Cash Out</p>
-                  <p className="text-lg font-semibold">${userSession.endAmount.toFixed(2)}</p>
-                </div>
-                <div className="rounded-md border p-3">
-                  <p className="text-xs text-muted-foreground">Result</p>
-                  <p
-                    className={`text-lg font-semibold ${
-                      userSession.endAmount - userSession.buyIn >= 0 ? 'text-green-600' : 'text-red-600'
-                    }`}
-                  >
-                    {userSession.endAmount - userSession.buyIn >= 0 ? '+' : '-'}$
-                    {Math.abs(userSession.endAmount - userSession.buyIn).toFixed(2)}
-                  </p>
-                </div>
-              </div>
-
-              <p className="text-sm text-muted-foreground">
-                Use confirm to lock your session. Add payout details so others know how to pay you (or how you paid out).
-              </p>
-
-              <div className="flex items-center gap-3">
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="default"
-                    onClick={handleConfirmSession}
-                  >
-                    Confirm Session
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleOpenDispute}
-                  >
-                    Dispute Session
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Confirmation and payout details are visible to you and the owner on this device.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Participants (merged list in player format) */}
         {user && (
           <div id="join-game-section">
             <JoinGameForm 
               game={game}
-              canAddMember={canAdminEdit && !isClosed}
-              onAddMember={canAdminEdit && !isClosed ? handleOpenAddMember : undefined}
+              canAddMember={canAdminEdit}
+              onAddMember={canAdminEdit ? handleOpenAddMember : undefined}
               canKick={canKick}
               onKickParticipant={(userId, playerName) => handleKickParticipant(userId, playerName)}
             />
@@ -924,145 +646,6 @@ function GameDetailContent() {
         )}
       </div>
 
-      {confirmDialogOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
-          <Card className="w-full max-w-lg">
-            <CardHeader>
-              <CardTitle>Confirm Your Session</CardTitle>
-              <CardDescription>
-                Review and confirm your session. Add how you want to be paid (or how you paid out).
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="rounded-md border p-3">
-                  <p className="text-xs text-muted-foreground">Buy-In</p>
-                  <p className="text-lg font-semibold">
-                    ${userSession?.buyIn.toFixed(2) ?? '0.00'}
-                  </p>
-                </div>
-                <div className="rounded-md border p-3">
-                  <p className="text-xs text-muted-foreground">Cash Out</p>
-                  <p className="text-lg font-semibold">
-                    ${userSession?.endAmount.toFixed(2) ?? '0.00'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirmMethod">Payment method</Label>
-                <Select
-                  value={confirmMethod}
-                  onValueChange={(val) => setConfirmMethod(val)}
-                >
-                  <SelectTrigger id="confirmMethod" className="w-full">
-                    <SelectValue placeholder="Choose a method" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Zelle">Zelle</SelectItem>
-                    <SelectItem value="Cash App">Cash App</SelectItem>
-                    <SelectItem value="Venmo">Venmo</SelectItem>
-                    <SelectItem value="Cash">Cash</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirmHandle">Username / handle</Label>
-                <Input
-                  id="confirmHandle"
-                  placeholder="@johndoe"
-                  value={confirmHandle}
-                  onChange={(e) => setConfirmHandle(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirmPayoutTime">Payout completed at</Label>
-                <Input
-                  id="confirmPayoutTime"
-                  type="datetime-local"
-                  value={confirmPayoutTime}
-                  onChange={(e) => setConfirmPayoutTime(e.target.value)}
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <Button variant="outline" type="button" onClick={() => setConfirmDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="button" onClick={handleConfirmDialogSave}>
-                  Confirm
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {disputeDialogOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
-          <Card className="w-full max-w-lg">
-            <CardHeader>
-              <CardTitle>Dispute Session</CardTitle>
-              <CardDescription>
-                Suggest the buy-in and payout amounts you believe are correct.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="disputeBuyIn">Buy-In</Label>
-                  <Input
-                    id="disputeBuyIn"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={disputeBuyIn}
-                    onChange={(e) => setDisputeBuyIn(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="disputePayout">Payout</Label>
-                  <Input
-                    id="disputePayout"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={disputePayout}
-                    onChange={(e) => setDisputePayout(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <Button variant="outline" type="button" onClick={() => setDisputeDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="button" onClick={handleSubmitDispute}>
-                  Submit Dispute
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {disputeNoticeOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle>Dispute Submitted</CardTitle>
-              <CardDescription>
-                When the host verifies this dispute, you can confirm the correct amount.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setDisputeNoticeOpen(false)}>
-                Close
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {addMemberOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
@@ -1078,7 +661,7 @@ function GameDetailContent() {
                 <Label htmlFor="memberType">Player type</Label>
                 <Select
                   value={addMemberMode}
-                  onValueChange={(val: 'group' | 'guest' | 'one-time') => {
+                  onValueChange={(val: 'group' | 'guest') => {
                     if (val === 'group') {
                       const memberIdsInGame = new Set(game.sessions.map(s => s.userId).filter(Boolean) as string[])
                       const eligible = (group?.members || []).filter(m => !memberIdsInGame.has(m.userId))
@@ -1087,14 +670,8 @@ function GameDetailContent() {
                       setMemberName(eligible[0]?.userName || '')
                       setMemberSearch('')
                       setSelectedMembers([])
-                    } else if (val === 'guest') {
-                      setAddMemberMode('guest')
-                      setSelectedGroupMemberId('')
-                      setMemberName('')
-                      setMemberSearch('')
-                      setSelectedMembers([])
                     } else {
-                      setAddMemberMode('one-time')
+                      setAddMemberMode('guest')
                       setSelectedGroupMemberId('')
                       setMemberName('')
                       setMemberSearch('')
@@ -1108,7 +685,6 @@ function GameDetailContent() {
                   <SelectContent>
                     <SelectItem value="group">Existing player</SelectItem>
                     <SelectItem value="guest">Guest</SelectItem>
-                    <SelectItem value="one-time">One-time player</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1217,7 +793,7 @@ function GameDetailContent() {
               ) : (
                 <div className="space-y-2">
                   <Label htmlFor="memberName">
-                    {addMemberMode === 'guest' ? 'Guest name' : 'One-time player name'}
+                    Guest name
                   </Label>
                   <Input
                     id="memberName"

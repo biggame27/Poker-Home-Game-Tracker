@@ -39,7 +39,6 @@ CREATE TABLE IF NOT EXISTS games (
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
   date DATE NOT NULL,
   notes TEXT,
-  status TEXT NOT NULL CHECK (status IN ('open', 'in-progress', 'completed')) DEFAULT 'open',
   created_by TEXT NOT NULL, -- Clerk user ID
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -65,9 +64,10 @@ CREATE TABLE IF NOT EXISTS claim_requests (
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
   guest_name TEXT NOT NULL,
   requester_id TEXT NOT NULL, -- Clerk user ID
-  requester_name TEXT,
+  requester_email TEXT,
   status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'denied')) DEFAULT 'pending',
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(group_id, guest_name, requester_id) -- One claim request per group/guest/requester combination
 );
 
 -- Indexes for performance

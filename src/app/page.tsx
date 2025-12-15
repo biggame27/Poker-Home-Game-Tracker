@@ -13,7 +13,7 @@ import type { Game } from '@/types'
 import { useRouter } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { createGame, updateGameSession, updateGameStatus } from '@/lib/supabase/storage'
+import { createGame, updateGameSession } from '@/lib/supabase/storage'
 
 export default function Dashboard() {
   const { user, isLoaded } = useUser()

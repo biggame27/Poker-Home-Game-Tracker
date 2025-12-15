@@ -5,7 +5,7 @@ export interface GameSession {
   buyIn: number
   endAmount: number
   profit: number
-  role?: 'guest' | 'member' | 'bank' | 'host' | 'admin' | 'one-time'
+  role?: 'guest' | 'member' | 'bank' | 'host' | 'admin'
   userId?: string // Clerk user ID if player is a registered user
 }
 
@@ -17,7 +17,6 @@ export interface Game {
   notes?: string
   createdBy: string // Clerk user ID (host)
   createdAt: string
-  status: 'open' | 'in-progress' | 'completed' // Game status
 }
 
 export interface Group {

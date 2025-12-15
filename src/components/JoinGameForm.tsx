@@ -98,7 +98,7 @@ export function JoinGameForm({ game, onAddMember, canAddMember, canKick = false,
                       <p className="font-medium flex items-center gap-2">
                         {session.playerName}
                         <span className="text-[10px] uppercase tracking-wide rounded-full bg-muted text-muted-foreground px-2 py-0.5">
-                          {!session.userId ? 'One-time' : 'Guest'}
+                          Guest
                         </span>
                       </p>
                       <p className="text-xs text-muted-foreground">

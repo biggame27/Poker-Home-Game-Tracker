@@ -268,15 +268,15 @@ type ClaimRequest = {
   groupId: string
   guestName: string
   requesterId: string
-  requesterName?: string
-  status: 'pending' | 'approved' | 'denied'
+  requesterEmail?: string
+  status: 'pending' | 'approved'
 }
 
 export async function submitClaimRequest(
   groupId: string,
   guestName: string,
   requesterId: string,
-  requesterName?: string
+  requesterEmail?: string
 ): Promise<ClaimRequest | null> {
   const supabase = createClient()
   const trimmed = guestName.trim()
@@ -289,7 +289,7 @@ export async function submitClaimRequest(
         group_id: groupId,
         guest_name: trimmed,
         requester_id: requesterId,
-        requester_name: requesterName || null,
+        requester_email: requesterEmail || null,
         status: 'pending',
       },
       { onConflict: 'group_id,guest_name,requester_id' }
@@ -307,7 +307,7 @@ export async function submitClaimRequest(
     groupId: data.group_id,
     guestName: data.guest_name,
     requesterId: data.requester_id,
-    requesterName: data.requester_name || undefined,
+    requesterEmail: data.requester_email || undefined,
     status: data.status,
   }
 }
@@ -329,7 +329,7 @@ export async function getClaimRequests(groupId: string): Promise<ClaimRequest[]>
     groupId: d.group_id,
     guestName: d.guest_name,
     requesterId: d.requester_id,
-    requesterName: d.requester_name || undefined,
+    requesterEmail: d.requester_email || undefined,
     status: d.status,
   }))
 }
@@ -397,7 +397,11 @@ export async function approveClaimRequest(
     return false
   }
 
-  const merged = await mergeGuestSessionsToUser(req.group_id, req.guest_name, req.requester_id, req.requester_name)
+  // Get user name from Clerk or use a default
+  // Note: We'll need to fetch this from the user's profile or use email as fallback
+  const userName = req.requester_email?.split('@')[0] || 'Member'
+  
+  const merged = await mergeGuestSessionsToUser(req.group_id, req.guest_name, req.requester_id, userName)
   if (!merged) return false
 
   // Add as group member if not already
@@ -412,9 +416,30 @@ export async function approveClaimRequest(
     await supabase.from('group_members').insert({
       group_id: req.group_id,
       user_id: req.requester_id,
-      user_name: req.requester_name || 'Member',
+      user_name: userName,
       role: 'member',
     })
+  }
+
+  // Remove the old guest member record for this name (if it exists)
+  const { error: guestMemberDeleteError } = await supabase
+    .from('group_members')
+    .delete()
+    .eq('group_id', req.group_id)
+    .ilike('user_name', req.guest_name)
+    .like('user_id', 'guest-%')
+
+  if (guestMemberDeleteError) {
+    console.error('Warning: failed to delete guest member after merge:', guestMemberDeleteError)
+    // Non-fatal – stats are already merged
+  }
+
+  // Clean up any remaining guest sessions that still match this guest name
+  // (only affects rows where user_id is null or a guest-* id)
+  const cleaned = await removeGuestFromGroupSessions(req.group_id, req.guest_name)
+  if (!cleaned) {
+    console.error('Warning: failed to clean up guest sessions after merge')
+    // Non-fatal – merged sessions are already owned by the user
   }
 
   await supabase
@@ -447,13 +472,14 @@ export async function denyClaimRequest(
     return false
   }
 
+  // Delete the claim request instead of marking as denied
   const { error: delError } = await supabase
     .from('claim_requests')
-    .update({ status: 'denied' })
+    .delete()
     .eq('id', requestId)
 
   if (delError) {
-    console.error('Error denying claim request:', delError)
+    console.error('Error deleting claim request:', delError)
     return false
   }
 
@@ -700,7 +726,6 @@ export async function getGames(userId: string): Promise<Game[]> {
     notes: g.notes || undefined,
     createdBy: g.created_by,
     createdAt: g.created_at,
-    status: g.status as 'open' | 'in-progress' | 'completed',
     sessions: (g.game_sessions || []).map((s: any) => ({
       playerName: s.player_name,
       buyIn: parseFloat((s.buy_in ?? 0).toString()),
@@ -736,7 +761,6 @@ export async function getGamesByGroup(groupId: string): Promise<Game[]> {
     notes: g.notes || undefined,
     createdBy: g.created_by,
     createdAt: g.created_at,
-    status: g.status as 'open' | 'in-progress' | 'completed',
     sessions: (g.game_sessions || []).map((s: any) => ({
       playerName: s.player_name,
       buyIn: parseFloat((s.buy_in ?? 0).toString()),
@@ -772,7 +796,6 @@ export async function getGameById(gameId: string): Promise<Game | null> {
     notes: game.notes || undefined,
     createdBy: game.created_by,
     createdAt: game.created_at,
-    status: game.status as 'open' | 'in-progress' | 'completed',
     sessions: (game.game_sessions || []).map((s: any) => ({
       playerName: s.player_name,
       buyIn: parseFloat((s.buy_in ?? 0).toString()),
@@ -814,7 +837,6 @@ export async function getGamesByUser(userId: string): Promise<Game[]> {
       notes: g.notes || undefined,
       createdBy: g.created_by,
       createdAt: g.created_at,
-      status: g.status as 'open' | 'in-progress' | 'completed',
     sessions: (g.game_sessions || []).map((s: any) => ({
       playerName: s.player_name,
       buyIn: parseFloat((s.buy_in ?? 0).toString()),
@@ -831,8 +853,7 @@ export async function createGame(
   date: string,
   notes: string | undefined,
   userId: string,
-  userName: string,
-  status: 'open' | 'in-progress' | 'completed' = 'open'
+  userName: string
 ): Promise<Game | null> {
   const supabase = createClient()
   
@@ -845,7 +866,6 @@ export async function createGame(
       group_id: groupId,
       date,
       notes: notes || null,
-      status,
       created_by: userId,
     })
     .select()
@@ -887,23 +907,6 @@ export async function updateGameSession(
   const allowedRoles: GameSession['role'][] = ['guest', 'member', 'bank', 'host', 'admin']
   const roleToUse = allowedRoles.includes(roleOverride as any) ? roleOverride : undefined
 
-  // Prevent edits to closed games
-  const { data: gameStatusRow, error: statusError } = await supabase
-    .from('games')
-    .select('status')
-    .eq('id', gameId)
-    .single()
-
-  if (statusError || !gameStatusRow) {
-    console.error('Error verifying game status:', statusError)
-    return false
-  }
-
-  if (gameStatusRow.status === 'completed') {
-    console.warn('Attempted to edit a completed game; aborting update.')
-    return false
-  }
-  
   // Check if session exists
   let existing: { id: string } | null = null
 
@@ -973,23 +976,6 @@ export async function removeGameSession(
 ): Promise<boolean> {
   const supabase = createClient()
 
-  // Only allow removing from open or in-progress games
-  const { data: gameStatusRow, error: statusError } = await supabase
-    .from('games')
-    .select('status')
-    .eq('id', gameId)
-    .single()
-
-  if (statusError || !gameStatusRow) {
-    console.error('Error verifying game status before remove:', statusError)
-    return false
-  }
-
-  if (!['open', 'in-progress'].includes(gameStatusRow.status)) {
-    console.warn('Attempted to leave a non-open/non-in-progress game; aborting.')
-    return false
-  }
-
   const { error } = await supabase
     .from('game_sessions')
     .delete()
@@ -1014,17 +1000,12 @@ export async function removeGameParticipantAsAdmin(
   // Verify game and group ownership
   const { data: gameRow, error: fetchError } = await supabase
     .from('games')
-    .select('group_id, status, created_by')
+    .select('group_id, created_by')
     .eq('id', gameId)
     .single()
 
   if (fetchError || !gameRow) {
     console.error('Error verifying game for removal:', fetchError)
-    return false
-  }
-
-  if (gameRow.status === 'completed') {
-    console.warn('Attempted to remove from a completed game; aborting.')
     return false
   }
 
@@ -1077,67 +1058,6 @@ export async function removeGuestFromGroupSessions(
 
   if (error) {
     console.error('Error deleting guest sessions:', error)
-    return false
-  }
-
-  return true
-}
-
-export async function updateGameStatus(
-  gameId: string,
-  status: 'open' | 'in-progress' | 'completed',
-  userId: string
-): Promise<boolean> {
-  const supabase = createClient()
-
-  // Ensure only the group owner can change status
-  const { data: gameRow, error: fetchError } = await supabase
-    .from('games')
-    .select('group_id')
-    .eq('id', gameId)
-    .single()
-
-  if (fetchError || !gameRow) {
-    console.error('Error verifying game owner:', fetchError)
-    return false
-  }
-
-  const groupId = gameRow.group_id
-
-  const { data: groupRow, error: groupError } = await supabase
-    .from('groups')
-    .select('created_by')
-    .eq('id', groupId)
-    .single()
-
-  if (groupError || !groupRow) {
-    console.error('Error verifying group owner:', groupError)
-    return false
-  }
-
-  const { data: memberRow } = await supabase
-    .from('group_members')
-    .select('role')
-    .eq('group_id', groupId)
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  const isGroupOwner =
-    groupRow.created_by === userId ||
-    (memberRow?.role === 'owner')
-
-  if (!isGroupOwner) {
-    console.warn('Unauthorized status update attempt.')
-    return false
-  }
-
-  const { error } = await supabase
-    .from('games')
-    .update({ status })
-    .eq('id', gameId)
-
-  if (error) {
-    console.error('Error updating game status:', error)
     return false
   }
 

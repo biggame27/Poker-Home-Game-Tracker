@@ -28,7 +28,7 @@ export default function GroupDetailPage() {
   const [deletingGroup, setDeletingGroup] = useState(false)
   const [groupMenuOpen, setGroupMenuOpen] = useState(false)
   const [addingGuest, setAddingGuest] = useState(false)
-  const [claimRequests, setClaimRequests] = useState<{ id: string; guestName: string; requesterId: string; requesterName?: string; status: 'pending' | 'approved' | 'denied' }[]>([])
+  const [claimRequests, setClaimRequests] = useState<{ id: string; guestName: string; requesterId: string; requesterEmail?: string; status: 'pending' | 'approved' }[]>([])
 
   useEffect(() => {
     if (groupId) {
@@ -203,7 +203,8 @@ export default function GroupDetailPage() {
 
   const handleSubmitClaim = async (guestName: string) => {
     if (!group || !user?.id) return
-    const res = await submitClaimRequest(group.id, guestName, user.id, user.fullName || user.username || user.primaryEmailAddress?.emailAddress || 'Member')
+    const userEmail = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress || undefined
+    const res = await submitClaimRequest(group.id, guestName, user.id, userEmail)
     if (res) {
       setClaimRequests(prev => {
         const without = prev.filter(r => !(r.guestName.toLowerCase() === res.guestName.toLowerCase() && r.requesterId === res.requesterId))
@@ -229,6 +230,8 @@ export default function GroupDetailPage() {
     if (!user?.id) return
     const success = await denyClaimRequest(requestId, user.id)
     if (success) {
+      // Remove the denied claim from state immediately
+      setClaimRequests(prev => prev.filter(r => r.id !== requestId))
       await loadData()
     } else {
       setNotification({ type: 'error', message: 'Failed to deny claim.' })
@@ -453,7 +456,7 @@ export default function GroupDetailPage() {
                     <div key={r.id} className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
                       <div>
                         <p className="font-medium">{r.guestName}</p>
-                        <p className="text-xs text-muted-foreground">Requested by {r.requesterName || 'User'}</p>
+                        <p className="text-xs text-muted-foreground">Requested by {r.requesterEmail || 'User'}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button size="sm" variant="outline" onClick={() => handleDenyClaim(r.id)}>
@@ -539,9 +542,6 @@ export default function GroupDetailPage() {
                         if (mine?.status === 'pending') {
                           return <span className="text-xs text-muted-foreground">Claim pending</span>
                         }
-                        if (mine?.status === 'denied') {
-                          return <span className="text-xs text-destructive">Claim denied</span>
-                        }
                         return (
                           <Button
                             size="sm"
@@ -587,9 +587,6 @@ export default function GroupDetailPage() {
                         )
                         if (mine?.status === 'pending') {
                           return <span className="text-xs text-muted-foreground">Claim pending</span>
-                        }
-                        if (mine?.status === 'denied') {
-                          return <span className="text-xs text-destructive">Claim denied</span>
                         }
                         return (
                           <Button
@@ -659,11 +656,6 @@ export default function GroupDetailPage() {
                                   Joined
                                 </span>
                               )}
-                              {game.status === 'open' && (
-                                <span className="text-xs px-2 py-1 bg-green-500/10 text-green-600 rounded-full">
-                                  Open
-                                </span>
-                              )}
                             </div>
                             <p className="text-sm text-muted-foreground mt-1">
                               {playerCount} player{playerCount !== 1 ? 's' : ''} • {game.notes || 'No notes'}
@@ -695,16 +687,6 @@ export default function GroupDetailPage() {
                                   <Trash2 className="h-4 w-4" />
                                 )}
                               </Button>
-                            )}
-                            {game.status === 'in-progress' && (
-                              <span className="text-xs px-2 py-1 bg-amber-500/10 text-amber-600 rounded-full">
-                                In Progress
-                              </span>
-                            )}
-                            {game.status === 'completed' && (
-                              <span className="text-xs px-2 py-1 bg-muted text-muted-foreground rounded-full">
-                                Closed
-                              </span>
                             )}
                           </div>
                         </div>

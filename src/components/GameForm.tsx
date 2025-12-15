@@ -69,7 +69,6 @@ export function GameForm({ onSuccess, defaultGroupId }: { onSuccess?: () => void
           userId: p.playerName === user.fullName ? user.id : undefined
         })),
         notes: notes || undefined,
-        status: 'completed' as const
       }
 
       addGame(gameData)
