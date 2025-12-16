@@ -542,25 +542,24 @@ export default function GroupDetailPage() {
         {/* Members List */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setMembersExpanded(!membersExpanded)}
-                className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-              >
-                {membersExpanded ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </button>
+            <button
+              type="button"
+              onClick={() => setMembersExpanded(!membersExpanded)}
+              className="flex items-center gap-2 text-left rounded-md px-2 py-1 -mx-2 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              aria-expanded={membersExpanded}
+            >
+              {membersExpanded ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
               <h2 className="text-2xl font-semibold tracking-tight">
                 Members
                 <span className="text-muted-foreground font-normal ml-2">
                   ({totalMemberDisplay})
                 </span>
               </h2>
-            </div>
+            </button>
             {isOwner && (
               <Button size="sm" variant="outline" onClick={handleAddGuest} disabled={addingGuest}>
                 {addingGuest ? 'Saving...' : 'Add guest'}
