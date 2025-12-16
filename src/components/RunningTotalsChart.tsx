@@ -184,7 +184,7 @@ export function RunningTotalsChart({
               type="linear"
               stroke={lineColor}
               strokeWidth={2}
-              dot={{ r: 4, fill: lineColor, strokeWidth: 2 }}
+              dot={false}
               activeDot={{ r: 6, fill: lineColor, strokeWidth: 2 }}
             />
           </LineChart>
@@ -193,4 +193,3 @@ export function RunningTotalsChart({
     </Card>
   )
 }
-
