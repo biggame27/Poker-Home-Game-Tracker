@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Area } from 'recharts'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
+import { useMemo } from 'react'
 import { format } from 'date-fns'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { Game, GameSession } from '@/types'
@@ -105,15 +105,6 @@ export function RunningTotalsChart({
     return chartData[chartData.length - 1]?.total || 0
   }, [chartData])
 
-  const yPadding = useMemo(() => {
-    if (chartData.length === 0) return 0
-    const values = chartData.map(d => d.total)
-    const max = Math.max(...values)
-    return Math.max(Math.abs(max) * 0.08, 5)
-  }, [chartData])
-
-  const [tooltipActive, setTooltipActive] = useState(false)
-
   const isProfitable = finalValue >= 0
   const lineColor = isProfitable ? '#16a34a' : '#dc2626' // green-600 : red-600
 
@@ -151,17 +142,6 @@ export function RunningTotalsChart({
               left: 12,
               right: 12,
             }}
-            onMouseMove={(state: any) => {
-              if (!state?.isTooltipActive || !state?.activeCoordinate) {
-                setTooltipActive(false)
-                return
-              }
-              const distance = typeof state.chartY === 'number' && typeof state.activeCoordinate.y === 'number'
-                ? Math.abs(state.chartY - state.activeCoordinate.y)
-                : Infinity
-              setTooltipActive(distance <= 24)
-            }}
-            onMouseLeave={() => setTooltipActive(false)}
           >
             <CartesianGrid vertical={false} />
             <XAxis
@@ -183,17 +163,10 @@ export function RunningTotalsChart({
               axisLine={false}
               tickMargin={8}
               tickFormatter={(value) => `$${value}`}
-              domain={[
-                'dataMin',
-                (dataMax: number) => dataMax + yPadding
-              ]}
             />
             <ChartTooltip
               shared={false}
               trigger="hover"
-              active={tooltipActive}
-              cursor={false}
-              isAnimationActive={false}
               content={
                 <ChartTooltipContent
                   labelFormatter={(value) => {
@@ -213,7 +186,6 @@ export function RunningTotalsChart({
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 6, fill: lineColor, strokeWidth: 2 }}
-              isAnimationActive={false}
             />
           </LineChart>
         </ChartContainer>
