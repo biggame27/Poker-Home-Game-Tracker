@@ -34,7 +34,7 @@ export default function GroupDetailPage() {
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [savingName, setSavingName] = useState(false)
-  const [membersExpanded, setMembersExpanded] = useState(false)
+  const [membersExpanded, setMembersExpanded] = useState(true)
   const [showOnlyMyGames, setShowOnlyMyGames] = useState(false)
 
   // Pagination & filtering logic
@@ -1066,3 +1066,4 @@ export default function GroupDetailPage() {
     </div>
   )
 }
+
