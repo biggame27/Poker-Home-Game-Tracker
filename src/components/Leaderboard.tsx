@@ -6,9 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Trophy, Pencil } from 'lucide-react'
+import { Trophy, Pencil, ArrowDown } from 'lucide-react'
 import { updateGroupMemberName } from '@/lib/supabase/storage'
 import type { Game, GameSession, PlayerStats, GroupMember } from '@/types'
+import Link from 'next/link'
 
 type LeaderboardItem = PlayerStats & {
   buyIn?: number
@@ -20,6 +21,7 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const [sortColumn, setSortColumn] = useState<'profit' | 'sessions' | 'buyins'>('profit')
 
   // Create a map of userId -> current userName from group members
   const memberNameMap = useMemo(() => {
@@ -64,7 +66,6 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
             winRate: profit > 0 ? 1 : 0
           }
         })
-        .sort((a, b) => b.totalProfit - a.totalProfit)
     }
 
     // For multiple games, aggregate stats
@@ -116,8 +117,41 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
     })
 
     return Array.from(playerStats.values())
-      .sort((a, b) => b.totalProfit - a.totalProfit)
   }, [games, singleGame, userId, memberNameMap])
+
+  // Sort the leaderboard based on selected column (always descending - top to bottom)
+  const sortedLeaderboard = useMemo(() => {
+    const sorted = [...leaderboard]
+    
+    sorted.sort((a, b) => {
+      let aValue: number
+      let bValue: number
+      
+      switch (sortColumn) {
+        case 'sessions':
+          aValue = a.gamesPlayed || 0
+          bValue = b.gamesPlayed || 0
+          break
+        case 'buyins':
+          aValue = a.totalBuyIns || 0
+          bValue = b.totalBuyIns || 0
+          break
+        case 'profit':
+        default:
+          aValue = a.totalProfit || 0
+          bValue = b.totalProfit || 0
+          break
+      }
+      
+      return bValue - aValue
+    })
+    
+    return sorted
+  }, [leaderboard, sortColumn])
+
+  const handleSort = (column: 'profit' | 'sessions' | 'buyins') => {
+    setSortColumn(column)
+  }
 
   const getRankIcon = (rank: number) => {
     if (rank === 0) return <Trophy className="h-5 w-5 text-yellow-500" />
@@ -165,13 +199,46 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
             <TableRow>
               <TableHead className="w-16">Rank</TableHead>
               <TableHead>Player</TableHead>
-              <TableHead className="text-right">Sessions Played</TableHead>
-              <TableHead className="text-right">Total Buy-Ins</TableHead>
-              <TableHead className="text-right">Total Profit</TableHead>
+              <TableHead className="text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <span>Sessions Played</span>
+                  <button
+                    type="button"
+                    onClick={() => handleSort('sessions')}
+                    className={`flex items-center justify-center hover:text-primary transition-colors ${sortColumn === 'sessions' ? 'text-primary' : 'text-muted-foreground'}`}
+                  >
+                    <ArrowDown className="h-3 w-3" />
+                  </button>
+                </div>
+              </TableHead>
+              <TableHead className="text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <span>Total Buy-Ins</span>
+                  <button
+                    type="button"
+                    onClick={() => handleSort('buyins')}
+                    className={`flex items-center justify-center hover:text-primary transition-colors ${sortColumn === 'buyins' ? 'text-primary' : 'text-muted-foreground'}`}
+                  >
+                    <ArrowDown className="h-3 w-3" />
+                  </button>
+                </div>
+              </TableHead>
+              <TableHead className="text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <span>Total Profit</span>
+                  <button
+                    type="button"
+                    onClick={() => handleSort('profit')}
+                    className={`flex items-center justify-center hover:text-primary transition-colors ${sortColumn === 'profit' ? 'text-primary' : 'text-muted-foreground'}`}
+                  >
+                    <ArrowDown className="h-3 w-3" />
+                  </button>
+                </div>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {leaderboard.map((player, index) => {
+            {sortedLeaderboard.map((player, index) => {
               const key = player.userId ? `user-${player.userId}` : `name-${(player.name || 'Unknown').toString()}-${index}`
               const displayName = (player.name || 'Unknown').toString()
               const isCurrentUser = player.userId === user?.id
@@ -222,7 +289,25 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <span>{displayName}</span>
+                        {(() => {
+                          const isGuest = !player.userId || player.userId?.startsWith('guest-')
+                          const profileLink = groupId 
+                            ? (isGuest 
+                                ? `/groups/${groupId}/guests/${encodeURIComponent(displayName)}`
+                                : `/groups/${groupId}/members/${player.userId}`)
+                            : null
+                          
+                          return profileLink ? (
+                            <Link 
+                              href={profileLink}
+                              className="hover:underline hover:text-primary transition-colors"
+                            >
+                              {displayName}
+                            </Link>
+                          ) : (
+                            <span>{displayName}</span>
+                          )
+                        })()}
                         {isCurrentUser && groupId && (
                           <Button
                             size="icon"
@@ -249,7 +334,7 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
         </Table>
   )
 
-  if (leaderboard.length === 0) {
+  if (sortedLeaderboard.length === 0) {
     const emptyState = (
       <div className="flex items-center justify-center h-[200px] text-muted-foreground">
         {singleGame ? 'No players have joined this game yet.' : 'No players yet. Add a game to see the leaderboard.'}
