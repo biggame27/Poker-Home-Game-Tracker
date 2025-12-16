@@ -125,7 +125,7 @@ export default function MemberStatsPage() {
 
             {/* Running Totals Chart */}
             <RunningTotalsChart 
-              games={memberGames} 
+              games={games} 
               cumulative={true}
               title="Overall Running Total"
               description="Cumulative profit/loss over time"

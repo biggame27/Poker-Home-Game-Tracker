@@ -387,6 +387,9 @@ export default function GroupDetailPage() {
   )
   const myClaimedGuests = claimRequests.filter(r => r.requesterId === user?.id)
   const totalMemberDisplay = regularMembers.length + savedGuests.length + extraGuestParticipants.length
+  const totalBuyIns = games.reduce((sum, game) => 
+    sum + (game.sessions?.reduce((s: number, sess: any) => s + (sess.buyIn || 0), 0) || 0), 0
+  )
 
   return (
     <div className="min-h-screen bg-background">
@@ -483,22 +486,13 @@ export default function GroupDetailPage() {
           </div>
 
           {/* Group Info */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                  <Users className="h-4 w-4" />
-                  <span className="text-sm">Members</span>
+                  <span className="text-sm">Total Buy-Ins</span>
                 </div>
-                <p className="text-2xl font-bold">{totalMemberDisplay}</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                  <span className="text-sm">Games</span>
-                </div>
-                <p className="text-2xl font-bold">{games.length}</p>
+                <p className="text-2xl font-bold text-green-600">${totalBuyIns.toFixed(2)}</p>
               </CardContent>
             </Card>
             <Card>
@@ -535,8 +529,8 @@ export default function GroupDetailPage() {
         </div>
 
         {/* Members List */}
-        <Card className={!membersExpanded && (!isOwnerOrAdmin || claimRequests.filter(r => r.status === 'pending').length === 0) ? "pb-0" : ""}>
-          <CardHeader className="flex flex-row items-start justify-between">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -549,18 +543,21 @@ export default function GroupDetailPage() {
                   <ChevronDown className="h-4 w-4" />
                 )}
               </button>
-              <div>
-                <CardTitle>Members</CardTitle>
-                <CardDescription>People in this group</CardDescription>
-              </div>
+              <h2 className="text-2xl font-semibold tracking-tight">
+                Members
+                <span className="text-muted-foreground font-normal ml-2">
+                  ({totalMemberDisplay})
+                </span>
+              </h2>
             </div>
             {isOwner && (
               <Button size="sm" variant="outline" onClick={handleAddGuest} disabled={addingGuest}>
                 {addingGuest ? 'Saving...' : 'Add guest'}
               </Button>
             )}
-          </CardHeader>
-          <CardContent className={membersExpanded || (isOwnerOrAdmin && claimRequests.filter(r => r.status === 'pending').length > 0) ? "space-y-6" : "pb-0 pt-0"}>
+          </div>
+          
+          <div className={membersExpanded || (isOwnerOrAdmin && claimRequests.filter(r => r.status === 'pending').length > 0) ? "space-y-6" : ""}>
             {isOwnerOrAdmin && claimRequests.filter(r => r.status === 'pending').length > 0 && (
               <div className="rounded-lg border p-3 bg-muted/50 space-y-2">
                 <p className="text-sm font-semibold">Pending guest claims</p>
@@ -841,8 +838,8 @@ export default function GroupDetailPage() {
               ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Statistics */}
         {games.length > 0 && (
