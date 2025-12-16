@@ -936,11 +936,11 @@ export default function GroupDetailPage() {
                                         {userProfit >= 0 ? '+' : ''}${userProfit.toFixed(2)}
                                       </p>
                                     )}
-                                    {isOwner && (
+                                    {isOwnerOrAdmin && (
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="opacity-0 group-hover:opacity-100 transition-all h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-md"
+                                        className="transition-all h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-md"
                                         onClick={(e) => handleDeleteGame(game.id, e)}
                                         disabled={deletingGameId === game.id}
                                         title="Delete game"
