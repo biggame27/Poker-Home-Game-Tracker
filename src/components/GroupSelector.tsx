@@ -20,9 +20,10 @@ interface GroupSelectorProps {
   value: string
   onValueChange: (value: string) => void
   required?: boolean
+  excludePersonalGroup?: boolean
 }
 
-export function GroupSelector({ value, onValueChange, required }: GroupSelectorProps) {
+export function GroupSelector({ value, onValueChange, required, excludePersonalGroup }: GroupSelectorProps) {
   const { user } = useUser()
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
@@ -45,11 +46,15 @@ export function GroupSelector({ value, onValueChange, required }: GroupSelectorP
     }
   }
 
+  const displayedGroups = excludePersonalGroup && user?.id
+    ? groups.filter(g => !(g.name === 'Personal Games' && g.createdBy === user.id))
+    : groups
+
   if (loading) {
     return <div className="text-sm text-muted-foreground">Loading groups...</div>
   }
 
-  if (groups.length === 0) {
+  if (displayedGroups.length === 0) {
     return (
       <div className="space-y-2">
         <Label>Group</Label>
@@ -76,7 +81,7 @@ export function GroupSelector({ value, onValueChange, required }: GroupSelectorP
           <SelectValue placeholder="Select a group" />
         </SelectTrigger>
         <SelectContent>
-          {groups.map((group) => (
+          {displayedGroups.map((group) => (
             <SelectItem key={group.id} value={group.id}>
               {group.name}
             </SelectItem>
@@ -86,4 +91,3 @@ export function GroupSelector({ value, onValueChange, required }: GroupSelectorP
     </div>
   )
 }
-

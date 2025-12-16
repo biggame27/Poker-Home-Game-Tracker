@@ -107,7 +107,7 @@ export function GameForm({ onSuccess, defaultGroupId }: { onSuccess?: () => void
             required
           />
         </div>
-        <GroupSelector value={groupId} onValueChange={setGroupId} required />
+        <GroupSelector value={groupId} onValueChange={setGroupId} required excludePersonalGroup />
       </div>
 
       <div className="space-y-4">
@@ -215,4 +215,3 @@ export function GameForm({ onSuccess, defaultGroupId }: { onSuccess?: () => void
     </form>
   )
 }
-

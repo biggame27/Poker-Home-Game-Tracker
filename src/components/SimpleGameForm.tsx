@@ -199,7 +199,7 @@ export function SimpleGameForm({ defaultGroupId, onSuccess, gameType = 'group' }
                 required
               />
             </div>
-            <GroupSelector value={groupId} onValueChange={setGroupId} required />
+            <GroupSelector value={groupId} onValueChange={setGroupId} required excludePersonalGroup />
           </div>
           <div className="space-y-2">
             <Label htmlFor="notes">Notes (optional)</Label>
@@ -223,4 +223,3 @@ export function SimpleGameForm({ defaultGroupId, onSuccess, gameType = 'group' }
     </form>
   )
 }
-
