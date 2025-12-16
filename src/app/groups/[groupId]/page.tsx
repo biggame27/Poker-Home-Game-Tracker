@@ -11,7 +11,7 @@ import { RunningTotalsChart } from '@/components/RunningTotalsChart'
 import { OverallStats } from '@/components/OverallStats'
 import { getGroupById, getGamesByGroup, deleteGame, deleteGroup, updateGroup, addGuestMember, removeGroupMember, removeGuestFromGroupSessions, getClaimRequests, submitClaimRequest, approveClaimRequest, denyClaimRequest, promoteToAdmin, demoteFromAdmin, updateGroupMemberName } from '@/lib/supabase/storage'
 import type { Group, Game } from '@/types'
-import { Users, PlusCircle, Copy, Check, X, Trash2, EllipsisVertical, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
+import { Users, PlusCircle, Copy, Check, Trash2, EllipsisVertical, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 
@@ -850,9 +850,9 @@ export default function GroupDetailPage() {
                 <div className="space-y-3">
                   {paginatedGames.map((game) => {
                   const playerCount = game.sessions.length
-                  const totalSum = game.sessions.reduce((sum, s) => sum + (s.profit || 0), 0)
-                  const isBalanced = Math.abs(totalSum) < 0.01 // Allow small floating point errors
-                  const userJoined = game.sessions.some(s => s.userId === user?.id)
+                  const userSession = game.sessions.find(s => s.userId === user?.id)
+                  const userProfit = userSession?.profit ?? null
+                  const userJoined = !!userSession
                   
                   return (
                     <div key={game.id} className="relative group">
@@ -874,15 +874,12 @@ export default function GroupDetailPage() {
                             </p>
                           </div>
                           <div className="flex items-center gap-4">
-                            {isBalanced ? (
-                              <Check className="h-5 w-5 text-green-600" />
+                            {userProfit !== null ? (
+                              <p className={`font-semibold text-sm ${userProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {userProfit >= 0 ? '+' : ''}${userProfit.toFixed(2)}
+                              </p>
                             ) : (
-                              <>
-                                <X className="h-5 w-5 text-red-600" />
-                                <p className="font-semibold text-sm text-red-600">
-                                  ${totalSum.toFixed(2)}
-                                </p>
-                              </>
+                              <span className="text-muted-foreground text-sm">—</span>
                             )}
                             {isOwner && (
                               <Button
