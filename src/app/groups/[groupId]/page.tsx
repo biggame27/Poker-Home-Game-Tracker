@@ -841,9 +841,7 @@ export default function GroupDetailPage() {
           </div>
         </div>
 
-        {/* Statistics */}
-        {games.length > 0 && (
-          <>
+        {/* Statistics / Games section */}
             <OverallStats games={games} userId={user?.id} totalGamesInGroup={games.length} />
 
             {/* Chart and Games side by side */}
@@ -1043,8 +1041,6 @@ export default function GroupDetailPage() {
             </div>
 
             <Leaderboard games={games} groupId={groupId} onNameUpdate={loadData} groupMembers={group?.members} />
-          </>
-        )}
       </div>
     </div>
   )
