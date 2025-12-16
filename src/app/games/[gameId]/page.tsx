@@ -309,6 +309,7 @@ function GameDetailContent() {
     ).values()
   )
   const canKick = canAdminEdit
+  const defaultBuyInStep = 25
 
   const handleQuickJoin = async (): Promise<boolean> => {
     if (!user?.id) {
@@ -518,9 +519,6 @@ function GameDetailContent() {
               <div className="space-y-3">
                 {editingSessions.map((session, index) => {
                   const original = game.sessions[index]
-                  const profit =
-                    (parseFloat(session.endAmount || '0') || 0) -
-                    (parseFloat(session.buyIn || '0') || 0)
 
                   return (
                     <div
@@ -533,53 +531,88 @@ function GameDetailContent() {
                           {original?.playerName || session.playerName || 'Player'}
                         </p>
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">Buy-In ($)</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          className="w-32"
-                          value={session.buyIn}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            setEditingSessions(prev => {
-                              const next = [...prev]
-                              next[index] = { ...next[index], buyIn: value }
-                              return next
-                            })
-                          }}
-                          disabled={savingAll}
-                        />
+                      <div className="space-y-1 md:ml-auto md:text-right">
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                          Quick buy-ins
+                        </span>
+                        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:items-center sm:gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2 text-[11px] border-red-500 text-red-600 w-full sm:w-auto"
+                            disabled={savingAll}
+                            onClick={() => {
+                              setEditingSessions(prev => {
+                                const next = [...prev]
+                                const current = parseFloat(next[index].buyIn || '0') || 0
+                                const updated = Math.max(0, current - defaultBuyInStep)
+                                next[index] = { ...next[index], buyIn: updated.toString() }
+                                return next
+                              })
+                            }}
+                          >
+                            -25
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2 text-[11px] border-green-600 text-green-600 w-full sm:w-auto"
+                            disabled={savingAll}
+                            onClick={() => {
+                              setEditingSessions(prev => {
+                                const next = [...prev]
+                                const current = parseFloat(next[index].buyIn || '0') || 0
+                                const updated = current + defaultBuyInStep
+                                next[index] = { ...next[index], buyIn: updated.toString() }
+                                return next
+                              })
+                            }}
+                          >
+                            +25
+                          </Button>
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">End Amount ($)</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          className="w-32"
-                          value={session.endAmount}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            setEditingSessions(prev => {
-                              const next = [...prev]
-                              next[index] = { ...next[index], endAmount: value }
-                              return next
-                            })
-                          }}
-                          disabled={savingAll}
-                        />
-                      </div>
-                      <div className="space-y-1 md:ml-auto">
-                        <Label className="text-xs text-muted-foreground">Profit/Loss</Label>
-                        <p
-                          className={`text-sm font-semibold ${
-                            profit >= 0 ? 'text-green-600' : 'text-red-600'
-                          }`}
-                        >
-                          {profit >= 0 ? '+' : '-'}${Math.abs(profit).toFixed(2)}
-                        </p>
+                      <div className="flex w-full gap-3 md:w-auto">
+                        <div className="flex-1 space-y-1">
+                          <Label className="text-xs text-muted-foreground">Buy-In ($)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="w-full"
+                            value={session.buyIn}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              setEditingSessions(prev => {
+                                const next = [...prev]
+                                next[index] = { ...next[index], buyIn: value }
+                                return next
+                              })
+                            }}
+                            disabled={savingAll}
+                          />
+                        </div>
+                        <div className="flex-1 space-y-1">
+                          <Label className="text-xs text-muted-foreground">End Amount ($)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="w-full"
+                            value={session.endAmount}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              setEditingSessions(prev => {
+                                const next = [...prev]
+                                next[index] = { ...next[index], endAmount: value }
+                                return next
+                              })
+                            }}
+                            disabled={savingAll}
+                          />
+                        </div>
                       </div>
                     </div>
                   )
