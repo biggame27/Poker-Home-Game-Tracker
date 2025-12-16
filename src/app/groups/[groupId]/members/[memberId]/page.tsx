@@ -12,6 +12,7 @@ import type { Group, Game } from '@/types'
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
+import { Leaderboard } from '@/components/Leaderboard'
 
 export default function MemberStatsPage() {
   const params = useParams()
@@ -58,7 +59,7 @@ export default function MemberStatsPage() {
   }, [games, memberId])
 
   // Pagination logic - show all games, not just ones where member participated
-  const gamesPerPage = 5
+  const gamesPerPage = 4
   const totalPages = useMemo(() => Math.ceil(games.length / gamesPerPage), [games.length])
   
   useEffect(() => {
@@ -118,168 +119,177 @@ export default function MemberStatsPage() {
           </p>
         </div>
 
-        {/* Overall Stats */}
+        {/* Statistics / Games section */}
         {games.length > 0 && (
           <>
             <OverallStats games={games} userId={memberId} totalGamesInGroup={games.length} />
 
-            {/* Running Totals Chart */}
-            <RunningTotalsChart 
-              games={games} 
-              cumulative={true}
-              title="Overall Running Total"
-              description="Cumulative profit/loss over time"
-              userId={memberId}
-            />
+            {/* Chart and Games side by side */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+              {/* Chart - takes 2/3 of the space */}
+              <div className="lg:col-span-2 flex">
+                <div className="flex-1">
+                  <RunningTotalsChart 
+                    games={games} 
+                    cumulative={true}
+                    title="Overall Running Total"
+                    description="Cumulative profit/loss over time"
+                    userId={memberId}
+                  />
+                </div>
+              </div>
 
-            {/* Games List */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Games</CardTitle>
-                <CardDescription>
-                  {games.length} game{games.length !== 1 ? 's' : ''} total • {memberGames.length} played
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {paginatedGames.length > 0 ? (
-                  <>
-                    <div className="space-y-3">
-                      {paginatedGames.map((game) => {
-                        const memberSession = game.sessions.find(s => s.userId === memberId)
-                        const profit = memberSession 
-                          ? (memberSession.profit ?? (memberSession.endAmount - memberSession.buyIn))
-                          : null
-                        
-                        return (
-                          <Link
-                            key={game.id}
-                            href={`/games/${game.id}?from=group&groupId=${groupId}`}
-                            className="block"
-                          >
-                            <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
-                              <div className="flex-1">
-                                <p className="font-medium">
-                                  {format(new Date(game.date), 'MMMM dd, yyyy')}
-                                </p>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  {game.sessions.length} player{game.sessions.length !== 1 ? 's' : ''} • {game.notes || 'No notes'}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <div className="flex flex-col items-end gap-1">
-                                  <span className="text-xs text-muted-foreground">
-                                    Profit/Loss
-                                  </span>
-                                  {profit !== null ? (
-                                    <span
-                                      className={`text-sm font-semibold ${
-                                        profit >= 0
-                                          ? 'text-green-600'
-                                          : 'text-red-600'
-                                      }`}
-                                    >
-                                      {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
-                                    </span>
-                                  ) : (
-                                    <span className="text-sm text-muted-foreground">
-                                      —
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </Link>
-                        )
-                      })}
+              {/* Games List - takes 1/3 of the space */}
+              <div className="lg:col-span-1 flex">
+                <Card className="flex-1 flex flex-col">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Games</CardTitle>
+                        <CardDescription>Click on a game to view or join</CardDescription>
+                      </div>
                     </div>
-                    {totalPages > 1 && (
-                      <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                          disabled={currentPage === 1}
-                          className="gap-2"
-                        >
-                          <ArrowLeft className="h-4 w-4" />
-                          Previous
-                        </Button>
-                        <div className="flex items-center gap-2">
-                          {(() => {
-                            const pages: (number | string)[] = []
-                            const maxVisible = 7
+                  </CardHeader>
+                  <CardContent className="flex-1 overflow-y-auto pt-0 pb-2">
+                    {games.length > 0 ? (
+                      <>
+                        <div className="space-y-2">
+                          {paginatedGames.map((game) => {
+                            const playerCount = game.sessions.length
+                            const memberSession = game.sessions.find(s => s.userId === memberId)
+                            const memberProfit = memberSession?.profit ?? null
+                            const memberJoined = !!memberSession
                             
-                            if (totalPages <= maxVisible) {
-                              for (let i = 1; i <= totalPages; i++) {
-                                pages.push(i)
-                              }
-                            } else {
-                              pages.push(1)
-                              
-                              if (currentPage <= 3) {
-                                for (let i = 2; i <= 4; i++) {
-                                  pages.push(i)
-                                }
-                                pages.push('...')
-                                pages.push(totalPages)
-                              } else if (currentPage >= totalPages - 2) {
-                                pages.push('...')
-                                for (let i = totalPages - 3; i <= totalPages; i++) {
-                                  pages.push(i)
-                                }
-                              } else {
-                                pages.push('...')
-                                for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-                                  pages.push(i)
-                                }
-                                pages.push('...')
-                                pages.push(totalPages)
-                              }
-                            }
-                            
-                            return pages.map((page, idx) => {
-                              if (page === '...') {
-                                return (
-                                  <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">
-                                    ...
-                                  </span>
-                                )
-                              }
-                              
-                              return (
-                                <Button
-                                  key={page}
-                                  variant={currentPage === page ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={() => setCurrentPage(page as number)}
-                                  className="min-w-[2.5rem]"
-                                >
-                                  {page}
-                                </Button>
-                              )
-                            })
-                          })()}
+                            return (
+                              <div key={game.id} className="relative group">
+                                <Link href={`/games/${game.id}?from=group&groupId=${groupId}`}>
+                                  <div className="flex items-center justify-between gap-2 p-2 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <p className="font-medium text-sm truncate">
+                                          {format(new Date(game.date), 'MMM dd, yyyy')}
+                                        </p>
+                                        {memberJoined && (
+                                          <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded-full whitespace-nowrap">
+                                            Joined
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                                        {playerCount} player{playerCount !== 1 ? 's' : ''}
+                                        {game.notes && ` • ${game.notes}`}
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      {memberProfit !== null && (
+                                        <p className={`font-semibold text-sm whitespace-nowrap ${memberProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                          {memberProfit >= 0 ? '+' : ''}${memberProfit.toFixed(2)}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </Link>
+                              </div>
+                            )
+                          })}
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                          disabled={currentPage === totalPages}
-                          className="gap-2"
-                        >
-                          Next
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
+                        {totalPages > 1 && (
+                          <div className="flex flex-col gap-2 mt-4 pt-3 pb-0 border-t">
+                            <div className="flex items-center justify-center gap-1 flex-wrap">
+                              {(() => {
+                                const pages: (number | string)[] = []
+                                const maxVisible = 7
+                                
+                                if (totalPages <= maxVisible) {
+                                  for (let i = 1; i <= totalPages; i++) {
+                                    pages.push(i)
+                                  }
+                                } else {
+                                  pages.push(1)
+                                  
+                                  if (currentPage <= 3) {
+                                    for (let i = 2; i <= 4; i++) {
+                                      pages.push(i)
+                                    }
+                                    pages.push('...')
+                                    pages.push(totalPages)
+                                  } else if (currentPage >= totalPages - 2) {
+                                    pages.push('...')
+                                    for (let i = totalPages - 3; i <= totalPages; i++) {
+                                      pages.push(i)
+                                    }
+                                  } else {
+                                    pages.push('...')
+                                    for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                                      pages.push(i)
+                                    }
+                                    pages.push('...')
+                                    pages.push(totalPages)
+                                  }
+                                }
+                                
+                                return pages.map((page, idx) => {
+                                  if (page === '...') {
+                                    return (
+                                      <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">
+                                        ...
+                                      </span>
+                                    )
+                                  }
+                                  
+                                  return (
+                                    <Button
+                                      key={page}
+                                      variant={currentPage === page ? "default" : "outline"}
+                                      size="sm"
+                                      onClick={() => setCurrentPage(page as number)}
+                                      className="min-w-[2.5rem]"
+                                    >
+                                      {page}
+                                    </Button>
+                                  )
+                                })
+                              })()}
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                                className="gap-1 text-xs"
+                              >
+                                <ChevronLeft className="h-3 w-3" />
+                                Prev
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={currentPage === totalPages}
+                                className="gap-1 text-xs"
+                              >
+                                Next
+                                <ChevronRight className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <p className="text-lg font-medium mb-2">No games yet</p>
+                        <p className="text-muted-foreground">
+                          No games in this group yet.
+                        </p>
                       </div>
                     )}
-                  </>
-                ) : (
-                  <p className="text-muted-foreground text-center py-4">
-                    No games found
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            <Leaderboard games={games} groupId={groupId} userId={memberId} groupMembers={group?.members} />
           </>
         )}
 
