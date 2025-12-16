@@ -35,20 +35,31 @@ export default function GroupDetailPage() {
   const [editingName, setEditingName] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [membersExpanded, setMembersExpanded] = useState(true)
+  const [showOnlyMyGames, setShowOnlyMyGames] = useState(false)
 
-  // Pagination logic
+  // Pagination & filtering logic
   const gamesPerPage = 4
-  const totalPages = useMemo(() => Math.ceil(games.length / gamesPerPage), [games.length])
+  const filteredGames = useMemo(
+    () =>
+      showOnlyMyGames && user?.id
+        ? games.filter(game => game.sessions.some(s => s.userId === user.id))
+        : games,
+    [games, showOnlyMyGames, user?.id]
+  )
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredGames.length / gamesPerPage)),
+    [filteredGames.length]
+  )
   
   useEffect(() => {
-    if (games.length > 0 && currentPage > totalPages) {
+    if (filteredGames.length > 0 && currentPage > totalPages) {
       setCurrentPage(1)
     }
-  }, [games.length, currentPage, totalPages])
+  }, [filteredGames.length, currentPage, totalPages])
 
   const startIndex = (currentPage - 1) * gamesPerPage
   const endIndex = startIndex + gamesPerPage
-  const paginatedGames = games.slice(startIndex, endIndex)
+  const paginatedGames = filteredGames.slice(startIndex, endIndex)
 
   useEffect(() => {
     if (groupId) {
@@ -868,6 +879,16 @@ export default function GroupDetailPage() {
                         <CardTitle>Games</CardTitle>
                         <CardDescription>Click on a game to view or join</CardDescription>
                       </div>
+                      <div className="flex items-center gap-2">
+                        {user && (
+                          <Button
+                            size="sm"
+                            variant={showOnlyMyGames ? 'default' : 'outline'}
+                            onClick={() => setShowOnlyMyGames(prev => !prev)}
+                          >
+                            {showOnlyMyGames ? 'Showing my games' : 'My games only'}
+                          </Button>
+                        )}
                       {isOwnerOrAdmin && (
                         <Link href={`/games/new?groupId=${groupId}`}>
                           <Button size="sm" className="gap-2">
@@ -876,6 +897,7 @@ export default function GroupDetailPage() {
                           </Button>
                         </Link>
                       )}
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="flex-1 overflow-y-auto pt-0 pb-2">
