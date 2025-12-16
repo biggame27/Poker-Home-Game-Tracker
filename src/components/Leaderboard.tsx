@@ -201,11 +201,11 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
               <TableHead>Player</TableHead>
               <TableHead className="text-right">
                 <div className="flex items-center justify-end gap-2">
-                  <span>Sessions Played</span>
+                  <span>Total Profit</span>
                   <button
                     type="button"
-                    onClick={() => handleSort('sessions')}
-                    className={`flex items-center justify-center hover:text-primary transition-colors ${sortColumn === 'sessions' ? 'text-primary' : 'text-muted-foreground'}`}
+                    onClick={() => handleSort('profit')}
+                    className={`flex items-center justify-center hover:text-primary transition-colors ${sortColumn === 'profit' ? 'text-primary' : 'text-muted-foreground'}`}
                   >
                     <ArrowDown className="h-3 w-3" />
                   </button>
@@ -225,11 +225,11 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
               </TableHead>
               <TableHead className="text-right">
                 <div className="flex items-center justify-end gap-2">
-                  <span>Total Profit</span>
+                  <span>Sessions Played</span>
                   <button
                     type="button"
-                    onClick={() => handleSort('profit')}
-                    className={`flex items-center justify-center hover:text-primary transition-colors ${sortColumn === 'profit' ? 'text-primary' : 'text-muted-foreground'}`}
+                    onClick={() => handleSort('sessions')}
+                    className={`flex items-center justify-center hover:text-primary transition-colors ${sortColumn === 'sessions' ? 'text-primary' : 'text-muted-foreground'}`}
                   >
                     <ArrowDown className="h-3 w-3" />
                   </button>
@@ -322,11 +322,11 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="text-right">{player.gamesPlayed || 0}</TableCell>
-                  <TableCell className="text-right">${(player.totalBuyIns || 0).toFixed(2)}</TableCell>
                   <TableCell className={`text-right font-semibold ${(player.totalProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     ${(player.totalProfit || 0) >= 0 ? '+' : ''}{(player.totalProfit || 0).toFixed(2)}
                   </TableCell>
+                  <TableCell className="text-right">${(player.totalBuyIns || 0).toFixed(2)}</TableCell>
+                  <TableCell className="text-right">{player.gamesPlayed || 0}</TableCell>
                 </TableRow>
               )
             })}
@@ -378,4 +378,3 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
     </Card>
   )
 }
-
