@@ -11,7 +11,7 @@ import { RunningTotalsChart } from '@/components/RunningTotalsChart'
 import { OverallStats } from '@/components/OverallStats'
 import { getGroupById, getGamesByGroup, deleteGame, deleteGroup, updateGroup, addGuestMember, removeGroupMember, removeGuestFromGroupSessions, getClaimRequests, submitClaimRequest, approveClaimRequest, denyClaimRequest, promoteToAdmin, demoteFromAdmin, updateGroupMemberName } from '@/lib/supabase/storage'
 import type { Group, Game } from '@/types'
-import { Users, PlusCircle, Copy, Check, Trash2, EllipsisVertical, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
+import { Users, PlusCircle, Copy, Check, Trash2, EllipsisVertical, ChevronLeft, ChevronRight, Pencil, ChevronDown, ChevronUp } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 
@@ -34,9 +34,10 @@ export default function GroupDetailPage() {
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const [membersExpanded, setMembersExpanded] = useState(true)
 
   // Pagination logic
-  const gamesPerPage = 5
+  const gamesPerPage = 4
   const totalPages = useMemo(() => Math.ceil(games.length / gamesPerPage), [games.length])
   
   useEffect(() => {
@@ -534,11 +535,24 @@ export default function GroupDetailPage() {
         </div>
 
         {/* Members List */}
-        <Card>
+        <Card className={!membersExpanded && (!isOwnerOrAdmin || claimRequests.filter(r => r.status === 'pending').length === 0) ? "pb-0" : ""}>
           <CardHeader className="flex flex-row items-start justify-between">
-            <div>
-              <CardTitle>Members</CardTitle>
-              <CardDescription>People in this group</CardDescription>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMembersExpanded(!membersExpanded)}
+                className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {membersExpanded ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </button>
+              <div>
+                <CardTitle>Members</CardTitle>
+                <CardDescription>People in this group</CardDescription>
+              </div>
             </div>
             {isOwner && (
               <Button size="sm" variant="outline" onClick={handleAddGuest} disabled={addingGuest}>
@@ -546,7 +560,7 @@ export default function GroupDetailPage() {
               </Button>
             )}
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className={membersExpanded || (isOwnerOrAdmin && claimRequests.filter(r => r.status === 'pending').length > 0) ? "space-y-6" : "pb-0 pt-0"}>
             {isOwnerOrAdmin && claimRequests.filter(r => r.status === 'pending').length > 0 && (
               <div className="rounded-lg border p-3 bg-muted/50 space-y-2">
                 <p className="text-sm font-semibold">Pending guest claims</p>
@@ -570,12 +584,13 @@ export default function GroupDetailPage() {
                 </div>
               </div>
             )}
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-muted-foreground">Members</p>
-              {regularMembers.length === 0 && (
-                <p className="text-sm text-muted-foreground">No members yet.</p>
-              )}
-              {regularMembers.map((member) => {
+            {membersExpanded && (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-muted-foreground">Members</p>
+                {regularMembers.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No members yet.</p>
+                )}
+                {regularMembers.map((member) => {
                 const isCurrentUser = member.userId === user?.id
                 const isEditing = editingMemberId === member.userId
                 
@@ -704,9 +719,11 @@ export default function GroupDetailPage() {
                   </div>
                 )
               })}
-            </div>
+              </div>
+            )}
 
-            <div className="space-y-2">
+            {membersExpanded && (
+              <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-semibold text-muted-foreground">Guests</p>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
@@ -822,182 +839,6 @@ export default function GroupDetailPage() {
                   </div>
                 </div>
               ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Games List */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Games</CardTitle>
-                <CardDescription>Click on a game to view or join</CardDescription>
-              </div>
-              {isOwnerOrAdmin && (
-                <Link href={`/games/new?groupId=${groupId}`}>
-                  <Button size="sm" className="gap-2">
-                    <PlusCircle className="h-4 w-4" />
-                    New Game
-                  </Button>
-                </Link>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {games.length > 0 ? (
-              <>
-                <div className="space-y-3">
-                  {paginatedGames.map((game) => {
-                  const playerCount = game.sessions.length
-                  const userSession = game.sessions.find(s => s.userId === user?.id)
-                  const userProfit = userSession?.profit ?? null
-                  const userJoined = !!userSession
-                  
-                  return (
-                    <div key={game.id} className="relative group">
-                      <Link href={`/games/${game.id}?from=group&groupId=${groupId}`}>
-                        <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3">
-                              <p className="font-medium">
-                                {format(new Date(game.date), 'MMMM dd, yyyy')}
-                              </p>
-                              {userJoined && (
-                                <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
-                                  Joined
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {playerCount} player{playerCount !== 1 ? 's' : ''} • {game.notes || 'No notes'}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            {userProfit !== null ? (
-                              <p className={`font-semibold text-sm ${userProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {userProfit >= 0 ? '+' : ''}${userProfit.toFixed(2)}
-                              </p>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">—</span>
-                            )}
-                            {isOwner && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="opacity-0 group-hover:opacity-100 transition-all h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-md shadow-sm hover:shadow-md"
-                                onClick={(e) => handleDeleteGame(game.id, e)}
-                                disabled={deletingGameId === game.id}
-                                title="Delete game"
-                              >
-                                {deletingGameId === game.id ? (
-                                  <div className="h-4 w-4 border-2 border-destructive border-t-transparent rounded-full animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-4 w-4" />
-                                )}
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </Link>
-                    </div>
-                  )
-                  })}
-                </div>
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                      className="gap-2"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Previous
-                    </Button>
-                    <div className="flex items-center gap-2">
-                      {(() => {
-                        const pages: (number | string)[] = []
-                        const maxVisible = 7
-                        
-                        if (totalPages <= maxVisible) {
-                          for (let i = 1; i <= totalPages; i++) {
-                            pages.push(i)
-                          }
-                        } else {
-                          pages.push(1)
-                          
-                          if (currentPage <= 3) {
-                            for (let i = 2; i <= 4; i++) {
-                              pages.push(i)
-                            }
-                            pages.push('...')
-                            pages.push(totalPages)
-                          } else if (currentPage >= totalPages - 2) {
-                            pages.push('...')
-                            for (let i = totalPages - 3; i <= totalPages; i++) {
-                              pages.push(i)
-                            }
-                          } else {
-                            pages.push('...')
-                            for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-                              pages.push(i)
-                            }
-                            pages.push('...')
-                            pages.push(totalPages)
-                          }
-                        }
-                        
-                        return pages.map((page, idx) => {
-                          if (page === '...') {
-                            return (
-                              <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">
-                                ...
-                              </span>
-                            )
-                          }
-                          
-                          return (
-                            <Button
-                              key={page}
-                              variant={currentPage === page ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setCurrentPage(page as number)}
-                              className="min-w-[2.5rem]"
-                            >
-                              {page}
-                            </Button>
-                          )
-                        })
-                      })()}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                      className="gap-2"
-                    >
-                      Next
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <PlusCircle className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-lg font-medium mb-2">No games yet</p>
-                <p className="text-muted-foreground mb-6">
-                  Create your first game to get started!
-                </p>
-                <Link href={`/games/new?groupId=${groupId}`}>
-                  <Button className="gap-2">
-                    <PlusCircle className="h-4 w-4" />
-                    Create First Game
-                  </Button>
-                </Link>
               </div>
             )}
           </CardContent>
@@ -1008,13 +849,201 @@ export default function GroupDetailPage() {
           <>
             <OverallStats games={games} userId={user?.id} totalGamesInGroup={games.length} />
 
-            <RunningTotalsChart 
-              games={games} 
-              cumulative={true}
-              title="Overall Running Total"
-              description="Cumulative profit/loss over time"
-              userId={user?.id}
-            />
+            {/* Chart and Games side by side */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+              {/* Chart - takes 2/3 of the space */}
+              <div className="lg:col-span-2 flex">
+                <div className="flex-1">
+                  <RunningTotalsChart 
+                    games={games} 
+                    cumulative={true}
+                    title="Overall Running Total"
+                    description="Cumulative profit/loss over time"
+                    userId={user?.id}
+                  />
+                </div>
+              </div>
+
+              {/* Games List - takes 1/3 of the space */}
+              <div className="lg:col-span-1 flex">
+                <Card className="flex-1 flex flex-col">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Games</CardTitle>
+                        <CardDescription>Click on a game to view or join</CardDescription>
+                      </div>
+                      {isOwnerOrAdmin && (
+                        <Link href={`/games/new?groupId=${groupId}`}>
+                          <Button size="sm" className="gap-2">
+                            <PlusCircle className="h-4 w-4" />
+                            New Game
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex-1 overflow-y-auto pt-0 pb-2">
+                    {games.length > 0 ? (
+                      <>
+                        <div className="space-y-2">
+                          {paginatedGames.map((game) => {
+                          const playerCount = game.sessions.length
+                          const userSession = game.sessions.find(s => s.userId === user?.id)
+                          const userProfit = userSession?.profit ?? null
+                          const userJoined = !!userSession
+                          
+                          return (
+                            <div key={game.id} className="relative group">
+                              <Link href={`/games/${game.id}?from=group&groupId=${groupId}`}>
+                                <div className="flex items-center justify-between gap-2 p-2 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <p className="font-medium text-sm truncate">
+                                        {format(new Date(game.date), 'MMM dd, yyyy')}
+                                      </p>
+                                      {userJoined && (
+                                        <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded-full whitespace-nowrap">
+                                          Joined
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                                      {playerCount} player{playerCount !== 1 ? 's' : ''}
+                                      {game.notes && ` • ${game.notes}`}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    {userProfit !== null && (
+                                      <p className={`font-semibold text-sm whitespace-nowrap ${userProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {userProfit >= 0 ? '+' : ''}${userProfit.toFixed(2)}
+                                      </p>
+                                    )}
+                                    {isOwner && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="opacity-0 group-hover:opacity-100 transition-all h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-md"
+                                        onClick={(e) => handleDeleteGame(game.id, e)}
+                                        disabled={deletingGameId === game.id}
+                                        title="Delete game"
+                                      >
+                                        {deletingGameId === game.id ? (
+                                          <div className="h-3.5 w-3.5 border-2 border-destructive border-t-transparent rounded-full animate-spin" />
+                                        ) : (
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        )}
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              </Link>
+                            </div>
+                          )
+                          })}
+                        </div>
+                        {totalPages > 1 && (
+                          <div className="flex flex-col gap-2 mt-4 pt-3 pb-0 border-t">
+                            <div className="flex items-center justify-center gap-1 flex-wrap">
+                              {(() => {
+                                const pages: (number | string)[] = []
+                                const maxVisible = 7
+                                
+                                if (totalPages <= maxVisible) {
+                                  for (let i = 1; i <= totalPages; i++) {
+                                    pages.push(i)
+                                  }
+                                } else {
+                                  pages.push(1)
+                                  
+                                  if (currentPage <= 3) {
+                                    for (let i = 2; i <= 4; i++) {
+                                      pages.push(i)
+                                    }
+                                    pages.push('...')
+                                    pages.push(totalPages)
+                                  } else if (currentPage >= totalPages - 2) {
+                                    pages.push('...')
+                                    for (let i = totalPages - 3; i <= totalPages; i++) {
+                                      pages.push(i)
+                                    }
+                                  } else {
+                                    pages.push('...')
+                                    for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+                                      pages.push(i)
+                                    }
+                                    pages.push('...')
+                                    pages.push(totalPages)
+                                  }
+                                }
+                                
+                                return pages.map((page, idx) => {
+                                  if (page === '...') {
+                                    return (
+                                      <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">
+                                        ...
+                                      </span>
+                                    )
+                                  }
+                                  
+                                  return (
+                                    <Button
+                                      key={page}
+                                      variant={currentPage === page ? "default" : "outline"}
+                                      size="sm"
+                                      onClick={() => setCurrentPage(page as number)}
+                                      className="min-w-[2.5rem]"
+                                    >
+                                      {page}
+                                    </Button>
+                                  )
+                                })
+                              })()}
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                                className="gap-1 text-xs"
+                              >
+                                <ChevronLeft className="h-3 w-3" />
+                                Prev
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={currentPage === totalPages}
+                                className="gap-1 text-xs"
+                              >
+                                Next
+                                <ChevronRight className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <PlusCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                        <p className="text-lg font-medium mb-2">No games yet</p>
+                        <p className="text-muted-foreground mb-6">
+                          Create your first game to get started!
+                        </p>
+                        <Link href={`/games/new?groupId=${groupId}`}>
+                          <Button className="gap-2">
+                            <PlusCircle className="h-4 w-4" />
+                            Create First Game
+                          </Button>
+                        </Link>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
 
             <Leaderboard games={games} groupId={groupId} onNameUpdate={loadData} groupMembers={group?.members} />
           </>
