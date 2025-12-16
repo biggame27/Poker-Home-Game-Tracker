@@ -31,7 +31,7 @@ function GameDetailContent() {
     endAmount: string
     userId?: string
   }[]>([])
-  const [savingIndex, setSavingIndex] = useState<number | null>(null)
+  const [savingAll, setSavingAll] = useState(false)
   const [participantUpdating, setParticipantUpdating] = useState(false)
   const [addMemberOpen, setAddMemberOpen] = useState(false)
   const [addMemberMode, setAddMemberMode] = useState<'group' | 'guest'>('group')
@@ -511,7 +511,7 @@ function GameDetailContent() {
             <CardHeader>
               <CardTitle>Manage Sessions</CardTitle>
               <CardDescription>
-                Edit buy-ins and cash outs for all participants. Changes apply immediately.
+                Edit buy-ins and cash outs for all participants. Click Save All to apply changes.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -549,6 +549,7 @@ function GameDetailContent() {
                               return next
                             })
                           }}
+                          disabled={savingAll}
                         />
                       </div>
                       <div className="space-y-1">
@@ -567,6 +568,7 @@ function GameDetailContent() {
                               return next
                             })
                           }}
+                          disabled={savingAll}
                         />
                       </div>
                       <div className="space-y-1 md:ml-auto">
@@ -579,44 +581,6 @@ function GameDetailContent() {
                           {profit >= 0 ? '+' : '-'}${Math.abs(profit).toFixed(2)}
                         </p>
                       </div>
-                      <div className="space-y-1">
-                        <Button
-                          size="sm"
-                          className="mt-1"
-                          disabled={savingIndex === index}
-                          onClick={async () => {
-                            if (!user?.id) return
-
-                            const buyInAmount = parseFloat(session.buyIn) || 0
-                            const endAmount = parseFloat(session.endAmount) || 0
-
-                            setSavingIndex(index)
-                            try {
-                                const success = await updateGameSession(
-                                  game.id,
-                                  session.userId || null,
-                                  original?.playerName || session.playerName || 'Player',
-                                  buyInAmount,
-                                  endAmount
-                                )
-
-                              if (!success) {
-                                alert('Failed to update session. Make sure the game is open.')
-                                return
-                              }
-
-                              await refreshGame()
-                            } catch (error) {
-                              console.error('Error updating session:', error)
-                              alert('Failed to update session. Please try again.')
-                            } finally {
-                              setSavingIndex(null)
-                            }
-                          }}
-                        >
-                          {savingIndex === index ? 'Saving...' : 'Save'}
-                        </Button>
-                      </div>
                     </div>
                   )
                 })}
@@ -627,6 +591,53 @@ function GameDetailContent() {
                   </p>
                 )}
               </div>
+              
+              {editingSessions.length > 0 && (
+                <div className="flex justify-end mt-6 pt-4 border-t">
+                  <Button
+                    onClick={async () => {
+                      if (!user?.id) return
+
+                      setSavingAll(true)
+                      try {
+                        let allSuccess = true
+                        for (let index = 0; index < editingSessions.length; index++) {
+                          const session = editingSessions[index]
+                          const original = game.sessions[index]
+                          const buyInAmount = parseFloat(session.buyIn) || 0
+                          const endAmount = parseFloat(session.endAmount) || 0
+
+                          const success = await updateGameSession(
+                            game.id,
+                            session.userId || null,
+                            original?.playerName || session.playerName || 'Player',
+                            buyInAmount,
+                            endAmount
+                          )
+
+                          if (!success) {
+                            allSuccess = false
+                            alert(`Failed to update session for ${original?.playerName || session.playerName || 'Player'}. Make sure the game is open.`)
+                            break
+                          }
+                        }
+
+                        if (allSuccess) {
+                          await refreshGame()
+                        }
+                      } catch (error) {
+                        console.error('Error updating sessions:', error)
+                        alert('Failed to update sessions. Please try again.')
+                      } finally {
+                        setSavingAll(false)
+                      }
+                    }}
+                    disabled={savingAll}
+                  >
+                    {savingAll ? 'Saving...' : 'Save All'}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -848,4 +859,3 @@ export default function GameDetailPage() {
     </Suspense>
   )
 }
-

@@ -42,7 +42,7 @@ export default function GuestStatsPage() {
     }
   }
 
-  // Filter games to only include ones where this guest participated
+  // Get games where this guest participated (for stats)
   const guestGames = useMemo(() => {
     if (!guestName) return []
     return games.filter(game => 
@@ -52,19 +52,19 @@ export default function GuestStatsPage() {
     )
   }, [games, guestName])
 
-  // Pagination logic
+  // Pagination logic - show all games, not just ones where guest participated
   const gamesPerPage = 5
-  const totalPages = useMemo(() => Math.ceil(guestGames.length / gamesPerPage), [guestGames.length])
+  const totalPages = useMemo(() => Math.ceil(games.length / gamesPerPage), [games.length])
   
   useEffect(() => {
-    if (guestGames.length > 0 && currentPage > totalPages) {
+    if (games.length > 0 && currentPage > totalPages) {
       setCurrentPage(1)
     }
-  }, [guestGames.length, currentPage, totalPages])
+  }, [games.length, currentPage, totalPages])
 
   const startIndex = (currentPage - 1) * gamesPerPage
   const endIndex = startIndex + gamesPerPage
-  const paginatedGames = guestGames.slice(startIndex, endIndex)
+  const paginatedGames = games.slice(startIndex, endIndex)
 
   if (!isLoaded) {
     return (
@@ -114,7 +114,7 @@ export default function GuestStatsPage() {
         </div>
 
         {/* Overall Stats */}
-        {guestGames.length > 0 && (
+        {games.length > 0 && (
           <>
             {/* Create filtered games with guest sessions only for stats */}
             <OverallStats 
@@ -139,9 +139,9 @@ export default function GuestStatsPage() {
             {/* Games List */}
             <Card>
               <CardHeader>
-                <CardTitle>Games Played</CardTitle>
+                <CardTitle>Games</CardTitle>
                 <CardDescription>
-                  {guestGames.length} game{guestGames.length !== 1 ? 's' : ''} total
+                  {games.length} game{games.length !== 1 ? 's' : ''} total • {guestGames.length} played
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -152,7 +152,9 @@ export default function GuestStatsPage() {
                         const guestSession = game.sessions.find(s => 
                           !s.userId && s.playerName?.toLowerCase() === guestName.toLowerCase()
                         )
-                        const profit = guestSession?.profit ?? (guestSession ? guestSession.endAmount - guestSession.buyIn : 0)
+                        const profit = guestSession 
+                          ? (guestSession.profit ?? (guestSession.endAmount - guestSession.buyIn))
+                          : null
                         
                         return (
                           <Link
@@ -174,15 +176,21 @@ export default function GuestStatsPage() {
                                   <span className="text-xs text-muted-foreground">
                                     Profit/Loss
                                   </span>
-                                  <span
-                                    className={`text-sm font-semibold ${
-                                      profit >= 0
-                                        ? 'text-green-600'
-                                        : 'text-red-600'
-                                    }`}
-                                  >
-                                    {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
-                                  </span>
+                                  {profit !== null ? (
+                                    <span
+                                      className={`text-sm font-semibold ${
+                                        profit >= 0
+                                          ? 'text-green-600'
+                                          : 'text-red-600'
+                                      }`}
+                                    >
+                                      {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-sm text-muted-foreground">
+                                      —
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -281,11 +289,11 @@ export default function GuestStatsPage() {
           </>
         )}
 
-        {guestGames.length === 0 && (
+        {games.length === 0 && (
           <Card>
             <CardContent className="pt-6">
               <p className="text-muted-foreground text-center">
-                {guestName} hasn't participated in any games yet.
+                No games in this group yet.
               </p>
             </CardContent>
           </Card>

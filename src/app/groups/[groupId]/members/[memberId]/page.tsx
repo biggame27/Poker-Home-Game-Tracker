@@ -49,7 +49,7 @@ export default function MemberStatsPage() {
     return group.members.find(m => m.userId === memberId)
   }, [group, memberId])
 
-  // Filter games to only include ones where this member participated
+  // Get games where this member participated (for stats)
   const memberGames = useMemo(() => {
     if (!memberId) return []
     return games.filter(game => 
@@ -57,19 +57,19 @@ export default function MemberStatsPage() {
     )
   }, [games, memberId])
 
-  // Pagination logic
+  // Pagination logic - show all games, not just ones where member participated
   const gamesPerPage = 5
-  const totalPages = useMemo(() => Math.ceil(memberGames.length / gamesPerPage), [memberGames.length])
+  const totalPages = useMemo(() => Math.ceil(games.length / gamesPerPage), [games.length])
   
   useEffect(() => {
-    if (memberGames.length > 0 && currentPage > totalPages) {
+    if (games.length > 0 && currentPage > totalPages) {
       setCurrentPage(1)
     }
-  }, [memberGames.length, currentPage, totalPages])
+  }, [games.length, currentPage, totalPages])
 
   const startIndex = (currentPage - 1) * gamesPerPage
   const endIndex = startIndex + gamesPerPage
-  const paginatedGames = memberGames.slice(startIndex, endIndex)
+  const paginatedGames = games.slice(startIndex, endIndex)
 
   if (!isLoaded) {
     return (
@@ -119,13 +119,13 @@ export default function MemberStatsPage() {
         </div>
 
         {/* Overall Stats */}
-        {memberGames.length > 0 && (
+        {games.length > 0 && (
           <>
             <OverallStats games={games} userId={memberId} totalGamesInGroup={games.length} />
 
             {/* Running Totals Chart */}
             <RunningTotalsChart 
-              games={memberGames} 
+              games={games} 
               cumulative={true}
               title="Overall Running Total"
               description="Cumulative profit/loss over time"
@@ -135,9 +135,9 @@ export default function MemberStatsPage() {
             {/* Games List */}
             <Card>
               <CardHeader>
-                <CardTitle>Games Played</CardTitle>
+                <CardTitle>Games</CardTitle>
                 <CardDescription>
-                  {memberGames.length} game{memberGames.length !== 1 ? 's' : ''} total
+                  {games.length} game{games.length !== 1 ? 's' : ''} total • {memberGames.length} played
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -146,7 +146,9 @@ export default function MemberStatsPage() {
                     <div className="space-y-3">
                       {paginatedGames.map((game) => {
                         const memberSession = game.sessions.find(s => s.userId === memberId)
-                        const profit = memberSession?.profit ?? (memberSession ? memberSession.endAmount - memberSession.buyIn : 0)
+                        const profit = memberSession 
+                          ? (memberSession.profit ?? (memberSession.endAmount - memberSession.buyIn))
+                          : null
                         
                         return (
                           <Link
@@ -168,15 +170,21 @@ export default function MemberStatsPage() {
                                   <span className="text-xs text-muted-foreground">
                                     Profit/Loss
                                   </span>
-                                  <span
-                                    className={`text-sm font-semibold ${
-                                      profit >= 0
-                                        ? 'text-green-600'
-                                        : 'text-red-600'
-                                    }`}
-                                  >
-                                    {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
-                                  </span>
+                                  {profit !== null ? (
+                                    <span
+                                      className={`text-sm font-semibold ${
+                                        profit >= 0
+                                          ? 'text-green-600'
+                                          : 'text-red-600'
+                                      }`}
+                                    >
+                                      {profit >= 0 ? '+' : ''}${profit.toFixed(2)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-sm text-muted-foreground">
+                                      —
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -275,11 +283,11 @@ export default function MemberStatsPage() {
           </>
         )}
 
-        {memberGames.length === 0 && (
+        {games.length === 0 && (
           <Card>
             <CardContent className="pt-6">
               <p className="text-muted-foreground text-center">
-                {member.userName} hasn't participated in any games yet.
+                No games in this group yet.
               </p>
             </CardContent>
           </Card>
