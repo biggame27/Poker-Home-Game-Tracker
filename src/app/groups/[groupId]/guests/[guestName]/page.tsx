@@ -42,14 +42,25 @@ export default function GuestStatsPage() {
     }
   }
 
-  // Get games where this guest participated (for stats)
+  // Get games where this guest participated (for stats), filtered to only include the guest's sessions
   const guestGames = useMemo(() => {
     if (!guestName) return []
-    return games.filter(game => 
-      game.sessions.some((session: GameSession) => 
-        !session.userId && session.playerName?.toLowerCase() === guestName.toLowerCase()
+    return games
+      .filter(game => 
+        game.sessions.some((session: GameSession) => {
+          const nameMatches = session.playerName?.toLowerCase() === guestName.toLowerCase()
+          const isGuest = !session.userId || session.userId?.startsWith('guest-') || session.role === 'guest'
+          return nameMatches && isGuest
+        })
       )
-    )
+      .map(game => ({
+        ...game,
+        sessions: game.sessions.filter((session: GameSession) => {
+          const nameMatches = session.playerName?.toLowerCase() === guestName.toLowerCase()
+          const isGuest = !session.userId || session.userId?.startsWith('guest-') || session.role === 'guest'
+          return nameMatches && isGuest
+        })
+      }))
   }, [games, guestName])
 
   // Pagination logic - show all games, not just ones where guest participated
@@ -139,9 +150,11 @@ export default function GuestStatsPage() {
                   <>
                     <div className="space-y-3">
                       {paginatedGames.map((game) => {
-                        const guestSession = game.sessions.find(s => 
-                          !s.userId && s.playerName?.toLowerCase() === guestName.toLowerCase()
-                        )
+                        const guestSession = game.sessions.find(s => {
+                          const nameMatches = s.playerName?.toLowerCase() === guestName.toLowerCase()
+                          const isGuest = !s.userId || s.userId?.startsWith('guest-') || s.role === 'guest'
+                          return nameMatches && isGuest
+                        })
                         const profit = guestSession 
                           ? (guestSession.profit ?? (guestSession.endAmount - guestSession.buyIn))
                           : null

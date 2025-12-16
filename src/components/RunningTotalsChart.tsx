@@ -56,7 +56,9 @@ export function RunningTotalsChart({
               return session.userId === userId
             }
             if (guestName) {
-              return !session.userId && session.playerName?.toLowerCase() === guestName.toLowerCase()
+              const nameMatches = session.playerName?.toLowerCase() === guestName.toLowerCase()
+              const isGuest = !session.userId || session.userId?.startsWith('guest-') || session.role === 'guest'
+              return nameMatches && isGuest
             }
             return true
           })
