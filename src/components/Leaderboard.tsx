@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, type ReactElement } from 'react'
+import { useState, useMemo, useEffect, type ReactElement } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -22,6 +22,8 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
   const [editingName, setEditingName] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [sortColumn, setSortColumn] = useState<'profit' | 'sessions' | 'buyins'>('profit')
+  const [minSessions, setMinSessions] = useState(0)
+  const [maxSessions, setMaxSessions] = useState(0)
 
   // Create a map of userId -> current userName from group members
   const memberNameMap = useMemo(() => {
@@ -119,9 +121,19 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
     return Array.from(playerStats.values())
   }, [games, singleGame, userId, memberNameMap])
 
+  const filteredLeaderboard = useMemo(() => {
+    return leaderboard.filter(p => (p.gamesPlayed || 0) >= minSessions)
+  }, [leaderboard, minSessions])
+
+  useEffect(() => {
+    const max = leaderboard.reduce((m, p) => Math.max(m, p.gamesPlayed || 0), 0)
+    setMaxSessions(max)
+    setMinSessions(prev => Math.min(prev, max))
+  }, [leaderboard])
+
   // Sort the leaderboard based on selected column (always descending - top to bottom)
   const sortedLeaderboard = useMemo(() => {
-    const sorted = [...leaderboard]
+    const sorted = [...filteredLeaderboard]
     
     sorted.sort((a, b) => {
       let aValue: number
@@ -147,7 +159,7 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
     })
     
     return sorted
-  }, [leaderboard, sortColumn])
+  }, [filteredLeaderboard, sortColumn])
 
   const handleSort = (column: 'profit' | 'sessions' | 'buyins') => {
     setSortColumn(column)
@@ -334,6 +346,28 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
         </Table>
   )
 
+  const isOwnerOrAdmin = useMemo(() => {
+    if (!groupMembers || !user?.id) return false
+    return groupMembers.some(m => m.userId === user.id && (m.role === 'owner' || m.role === 'admin'))
+  }, [groupMembers, user?.id])
+
+  const adminFilterControl = isOwnerOrAdmin ? (
+    <div className="flex items-center gap-2 text-sm">
+      <span className="text-muted-foreground">Min sessions</span>
+      <Input
+        type="number"
+        min={0}
+        max={maxSessions}
+        value={minSessions === 0 ? '' : minSessions}
+        onChange={(e) => {
+          const next = Math.max(0, Number(e.target.value) || 0)
+          setMinSessions(Math.min(next, maxSessions))
+        }}
+        className="h-8 w-20"
+      />
+    </div>
+  ) : null
+
   if (sortedLeaderboard.length === 0) {
     const emptyState = (
       <div className="flex items-center justify-center h-[200px] text-muted-foreground">
@@ -361,16 +395,26 @@ export function Leaderboard({ games, hideCard = false, groupId, userId, singleGa
   }
 
   if (hideCard) {
-    return tableContent
+    return (
+      <div className="space-y-3">
+        {adminFilterControl}
+        {tableContent}
+      </div>
+    )
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Leaderboard</CardTitle>
-        <CardDescription>
-          {singleGame ? 'Player rankings for this game' : 'Player rankings based on total profit'}
-        </CardDescription>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <CardTitle>Leaderboard</CardTitle>
+            <CardDescription>
+              {singleGame ? 'Player rankings for this game' : 'Player rankings based on total profit'}
+            </CardDescription>
+          </div>
+          {adminFilterControl}
+        </div>
       </CardHeader>
       <CardContent>
         {tableContent}
