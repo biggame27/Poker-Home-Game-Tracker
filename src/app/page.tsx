@@ -20,14 +20,18 @@ export default function Dashboard() {
   const router = useRouter()
   const [games, setGames] = useState<Game[]>([])
   const [currentPage, setCurrentPage] = useState(1)
+  const [loading, setLoading] = useState(true)
 
   const loadGames = async () => {
     if (!user?.id) return
+    setLoading(true)
     try {
       const userGames = await getGames(user.id)
       setGames(userGames)
     } catch (error) {
       console.error('Error loading games:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -69,10 +73,13 @@ export default function Dashboard() {
   const endIndex = startIndex + gamesPerPage
   const paginatedGames = userGames.slice(startIndex, endIndex)
 
-  if (!isLoaded) {
+  if (!isLoaded || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="text-muted-foreground">Loading games...</div>
+        </div>
       </div>
     )
   }

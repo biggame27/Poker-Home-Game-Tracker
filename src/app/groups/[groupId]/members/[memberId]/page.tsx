@@ -23,6 +23,7 @@ export default function MemberStatsPage() {
   const [group, setGroup] = useState<Group | null>(null)
   const [games, setGames] = useState<Game[]>([])
   const [currentPage, setCurrentPage] = useState(1)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (groupId) {
@@ -32,6 +33,7 @@ export default function MemberStatsPage() {
 
   const loadData = async () => {
     if (!groupId) return
+    setLoading(true)
     try {
       const foundGroup = await getGroupById(groupId)
       if (foundGroup) {
@@ -41,6 +43,8 @@ export default function MemberStatsPage() {
       }
     } catch (error) {
       console.error('Error loading group data:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -72,10 +76,13 @@ export default function MemberStatsPage() {
   const endIndex = startIndex + gamesPerPage
   const paginatedGames = games.slice(startIndex, endIndex)
 
-  if (!isLoaded) {
+  if (!isLoaded || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="text-muted-foreground">Loading member stats...</div>
+        </div>
       </div>
     )
   }

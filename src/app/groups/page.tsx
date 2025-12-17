@@ -14,6 +14,7 @@ import { Users, Plus, UserPlus } from 'lucide-react'
 export default function GroupsPage() {
   const { user, isLoaded } = useUser()
   const [groups, setGroups] = useState<Group[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (isLoaded && user?.id) {
@@ -23,18 +24,24 @@ export default function GroupsPage() {
 
   const loadGroups = async () => {
     if (!user?.id) return
+    setLoading(true)
     try {
       const userGroups = await getGroups(user.id)
       setGroups(userGroups)
     } catch (error) {
       console.error('Error loading groups:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  if (!isLoaded) {
+  if (!isLoaded || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="text-muted-foreground">Loading groups...</div>
+        </div>
       </div>
     )
   }
