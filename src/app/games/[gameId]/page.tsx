@@ -41,6 +41,7 @@ function GameDetailContent() {
   const [memberName, setMemberName] = useState('')
   const [memberSaving, setMemberSaving] = useState(false)
   const [selectedMembers, setSelectedMembers] = useState<{ userId: string; userName: string }[]>([])
+  const [loading, setLoading] = useState(true)
 
   // Get the referrer from query params
   const from = searchParams.get('from') || null
@@ -54,6 +55,7 @@ function GameDetailContent() {
 
   const loadData = async () => {
     if (!gameId) return
+    setLoading(true)
     try {
       const foundGame = await getGameById(gameId)
       if (foundGame) {
@@ -72,6 +74,8 @@ function GameDetailContent() {
       }
     } catch (error) {
       console.error('Error loading game data:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -258,10 +262,13 @@ function GameDetailContent() {
   }
 
 
-  if (!isLoaded) {
+  if (!isLoaded || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="text-muted-foreground">Loading game...</div>
+        </div>
       </div>
     )
   }

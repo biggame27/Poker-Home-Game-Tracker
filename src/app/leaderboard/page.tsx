@@ -12,6 +12,8 @@ export default function LeaderboardPage() {
   const [allGames, setAllGames] = useState<Game[]>([])
   const [filteredGames, setFilteredGames] = useState<Game[]>([])
   const [filter, setFilter] = useState<'all' | 'individual'>('all')
+  const [loading, setLoading] = useState(true)
+  const [loadingFiltered, setLoadingFiltered] = useState(false)
 
   useEffect(() => {
     if (isLoaded && user?.id) {
@@ -21,12 +23,15 @@ export default function LeaderboardPage() {
 
   const loadGames = async () => {
     if (!user?.id) return
+    setLoading(true)
     try {
       const userGames = await getGames(user.id)
       setAllGames(userGames)
       setFilteredGames(userGames)
     } catch (error) {
       console.error('Error loading games:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -40,12 +45,26 @@ export default function LeaderboardPage() {
 
   const loadIndividualGames = async () => {
     if (!user?.id) return
+    setLoadingFiltered(true)
     try {
       const individualGames = await getGamesByUser(user.id)
       setFilteredGames(individualGames)
     } catch (error) {
       console.error('Error loading individual games:', error)
+    } finally {
+      setLoadingFiltered(false)
     }
+  }
+
+  if (!isLoaded || loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="text-muted-foreground">Loading leaderboard...</div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -65,7 +84,16 @@ export default function LeaderboardPage() {
           </TabsList>
         </Tabs>
 
-        <Leaderboard games={filteredGames} />
+        {loadingFiltered ? (
+          <div className="flex items-center justify-center h-[400px]">
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              <div className="text-muted-foreground">Loading stats...</div>
+            </div>
+          </div>
+        ) : (
+          <Leaderboard games={filteredGames} />
+        )}
       </div>
     </div>
   )

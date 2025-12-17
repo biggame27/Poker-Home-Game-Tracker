@@ -36,6 +36,7 @@ export default function GroupDetailPage() {
   const [savingName, setSavingName] = useState(false)
   const [membersExpanded, setMembersExpanded] = useState(false)
   const [showOnlyMyGames, setShowOnlyMyGames] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   // Pagination & filtering logic
   const gamesPerPage = 4
@@ -69,6 +70,7 @@ export default function GroupDetailPage() {
 
   const loadData = async () => {
     if (!groupId) return
+    setLoading(true)
     try {
       const foundGroup = await getGroupById(groupId)
       if (foundGroup) {
@@ -80,6 +82,8 @@ export default function GroupDetailPage() {
       }
     } catch (error) {
       console.error('Error loading group data:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -347,10 +351,13 @@ export default function GroupDetailPage() {
     }
   }
 
-  if (!isLoaded) {
+  if (!isLoaded || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="text-muted-foreground">Loading group...</div>
+        </div>
       </div>
     )
   }
